@@ -12,7 +12,7 @@ class Position:
         self.winner = '_'
         self.score = score
         self.enPassFrom = []
-        self.enPassTo = []
+        self.enPassTo = None
         self.boardList = {
             'W': {
                 'K': [(0, 3)],
@@ -21,6 +21,12 @@ class Position:
                 'B': [(0, 2), (0, 5)],
                 'N': [(0, 1), (0, 6)],
                 'P': [(1, 0), (1, 1), (1, 2), (1, 3), (1, 4), (1, 5), (1, 6), (1, 7)]
+
+                # 'P': [(3, 0)],
+                # 'Q': [],
+                # 'R': [(2, 2)],
+                # 'B': [],
+                # 'N': [],
             },
             'B': {
                 'K': [(7, 3)],
@@ -29,6 +35,10 @@ class Position:
                 'B': [(7, 2), (7, 5)],
                 'N': [(7, 1), (7, 6)],
                 'P': [(6, 0), (6, 1), (6, 2), (6, 3), (6, 4), (6, 5), (6, 6), (6, 7)]
+
+                # 'N': [],
+                # 'B': [],
+                # 'P': [(3, 1)]
             }
         }
 
@@ -205,10 +215,15 @@ def generate_next_possible_positions(position):
                 allMoves = moves(piece)
                 for line in allMoves:
                     for move in line:
+                        opPiece = False
                         di, dj = move
                         ni, nj = piecePos[0] + di, piecePos[1] + dj
                         if 0 <= ni < 8 and 0 <= nj < 8:
-                            if board[ni][nj][0] == '_':
+                            if board[ni][nj][0] != color:
+
+                                if board[ni][nj] != '_': # Other piece
+                                    opPiece = True
+
                                 # Board
                                 tempBoard = [row[:] for row in board]
                                 tempBoard[ni][nj] = (color + piece)
@@ -219,27 +234,154 @@ def generate_next_possible_positions(position):
                                 tempBoardList[color][piece].remove((piecePos[0], piecePos[1]))
                                 tempBoardList[color][piece].append((ni, nj))
 
+                                if opPiece: # remove other piece
+                                    tempBoardList[board[ni][nj][0]][board[ni][nj][1]].remove((ni, nj))
+
                                 new_position = Position(tempBoard, 'W' if color == 'B' else 'B', (piece, piecePos[0], piecePos[1], ni, nj))
                                 new_position.boardList = tempBoardList
                                 new_position.score = position_score(new_position)
 
                                 result.append(Node(new_position))
 
-                            elif board[ni][nj][0] == color:
-                                break
+                                if opPiece:
+                                    break
 
                             else:
                                 break
 
                         else:
                             break
+
+            # Pawns
             else:
+                allPossibleMovesTo = []
+                tempEnPassFrom = []
+                tempEnPassTo = None
+                change = False
+
+                # White
                 if color == 'W':
-                    pass
-                elif color == 'B':
-                    pass
+                    if board[piecePos[0] + 1][piecePos[1]] == '_':
+
+                        allPossibleMovesTo.append((piecePos[0] + 1, piecePos[1]))
+
+                        if piecePos[0] == 6:
+                            change = True
+
+                        if piecePos[0] == 1: # 2nd rank
+                            if board[piecePos[0] + 2][piecePos[1]] == '_':
+                                allPossibleMovesTo.append((piecePos[0] + 2, piecePos[1]))
+                                if piecePos[1] > 0:
+                                    tempEnPassFrom.append((piecePos[0] + 2, piecePos[1] - 1))
+                                if piecePos[1] < 7:
+                                    tempEnPassFrom.append((piecePos[0] + 2, piecePos[1] + 1))
+                                tempEnPassTo = (piecePos[0] + 1, piecePos[1])
+
+                    # En Passant
+                    if (piecePos[0], piecePos[1]) in position.enPassFrom:
+                        allPossibleMovesTo.append(position.enPassTo)
+
+                    # Captures
+                    if piecePos[1] > 0:
+                        if board[piecePos[0] + 1][piecePos[1] - 1][0] == 'B':
+                            allPossibleMovesTo.append((piecePos[0] + 1, piecePos[1] - 1))
+                    if piecePos[1] < 7:
+                        if board[piecePos[0] + 1][piecePos[1] + 1][0] == 'B':
+                            allPossibleMovesTo.append((piecePos[0] + 1, piecePos[1] + 1))
+
+                    # Generate actual moves
+                    transformList = ['Q', 'R', 'N', 'B'] if change else ['P']
+                    for move in allPossibleMovesTo:
+                        ni, nj = move
+
+                        for tp in transformList:
+                            # Board
+                            tempBoard = [row[:] for row in board]
+                            tempBoard[ni][nj] = (color + tp)
+                            tempBoard[piecePos[0]][piecePos[1]] = '_'
+
+                            # Board List
+                            tempBoardList = copy.deepcopy(boardList)
+                            tempBoardList[color][piece].remove((piecePos[0], piecePos[1]))
+                            tempBoardList[color][tp].append((ni, nj))
+
+                            if ni - piecePos[0] != 0 and nj - piecePos[1] != 0: # remove other piece
+                                if board[ni][nj] != '_':
+                                    tempBoardList[board[ni][nj][0]][board[ni][nj][1]].remove((ni, nj))
+                                else:
+                                    tempBoardList[board[ni - 1][nj][0]][board[ni - 1][nj][1]].remove((ni - 1, nj))
+                                    tempBoard[ni - 1][nj] = '_'
+
+                            new_position = Position(tempBoard, 'B',
+                                                    (piece, piecePos[0], piecePos[1], ni, nj))
+                            new_position.boardList = tempBoardList
+                            new_position.enPassFrom = tempEnPassFrom
+                            new_position.enPassTo = tempEnPassTo
+                            new_position.score = position_score(new_position)
+
+                            result.append(Node(new_position))
+
+                # Black
                 else:
-                    pass
+                    if board[piecePos[0] - 1][piecePos[1]] == '_':
+
+                        allPossibleMovesTo.append((piecePos[0] - 1, piecePos[1]))
+
+                        if piecePos[0] == 1:
+                            change = True
+
+                        if piecePos[0] == 1:  # 2nd rank
+                            if board[piecePos[0] - 2][piecePos[1]] == '_':
+                                allPossibleMovesTo.append((piecePos[0] - 2, piecePos[1]))
+                                if piecePos[1] > 0:
+                                    tempEnPassFrom.append((piecePos[0] - 2, piecePos[1] - 1))
+                                if piecePos[1] < 7:
+                                    tempEnPassFrom.append((piecePos[0] - 2, piecePos[1] + 1))
+                                tempEnPassTo = (piecePos[0] - 1, piecePos[1])
+
+                    # En Passant
+                    if (piecePos[0], piecePos[1]) in position.enPassFrom:
+                        allPossibleMovesTo.append(position.enPassTo)
+
+                    # Captures
+                    if piecePos[1] > 0:
+                        if board[piecePos[0] - 1][piecePos[1] - 1][0] == 'W':
+                            allPossibleMovesTo.append((piecePos[0] - 1, piecePos[1] - 1))
+                    if piecePos[1] < 7:
+                        if board[piecePos[0] - 1][piecePos[1] + 1][0] == 'W':
+                            allPossibleMovesTo.append((piecePos[0] - 1, piecePos[1] + 1))
+
+                    # Generate actual moves
+                    transformList = ['Q', 'R', 'N', 'B'] if change else ['P']
+                    for move in allPossibleMovesTo:
+                        ni, nj = move
+
+                        for tp in transformList:
+                            # Board
+                            tempBoard = [row[:] for row in board]
+                            tempBoard[ni][nj] = (color + tp)
+                            tempBoard[piecePos[0]][piecePos[1]] = '_'
+
+                            # Board List
+                            tempBoardList = copy.deepcopy(boardList)
+                            tempBoardList[color][piece].remove((piecePos[0], piecePos[1]))
+                            tempBoardList[color][tp].append((ni, nj))
+
+                            if ni - piecePos[0] != 0 and nj - piecePos[1] != 0:  # remove other piece
+                                if board[ni][nj] != '_':
+                                    tempBoardList[board[ni][nj][0]][board[ni][nj][1]].remove((ni, nj))
+                                else:
+                                    tempBoardList[board[ni + 1][nj][0]][board[ni + 1][nj][1]].remove((ni + 1, nj))
+                                    tempBoard[ni + 1][nj] = '_'
+
+                            new_position = Position(tempBoard, 'W',
+                                                    (piece, piecePos[0], piecePos[1], ni, nj))
+                            new_position.boardList = tempBoardList
+                            new_position.enPassFrom = tempEnPassFrom
+                            new_position.enPassTo = tempEnPassTo
+                            new_position.score = position_score(new_position)
+
+                            result.append(Node(new_position))
 
     return result
 
@@ -262,6 +404,7 @@ def play(position, depth):
 
 def generate_starting_position():
     board = [
+
         ['WR', 'WN', 'WB', 'WK', 'WQ', 'WB', 'WN', 'WR'],
         ['WP', 'WP', 'WP', 'WP', 'WP', 'WP', 'WP', 'WP'],
         ['_', '_', '_', '_', '_', '_', '_', '_'],
@@ -270,6 +413,16 @@ def generate_starting_position():
         ['_', '_', '_', '_', '_', '_', '_', '_'],
         ['BP', 'BP', 'BP', 'BP', 'BP', 'BP', 'BP', 'BP'],
         ['BR', 'BN', 'BB', 'BK', 'BQ', 'BB', 'BN', 'BR']
+
+        # ['_', '_', '_', '_', '_', '_', '_', '_'],
+        # ['_', '_', '_', '_', '_', '_', '_', '_'],
+        # ['_', '_', 'WR', '_', '_', '_', '_', '_'],
+        # ['WP', 'BP', '_', '_', '_', '_', '_', '_'],
+        # ['_', '_', '_', '_', '_', '_', '_', '_'],
+        # ['_', '_', '_', '_', '_', '_', '_', '_'],
+        # ['_', '_', '_', '_', '_', '_', '_', '_'],
+        # ['_', '_', '_', '_', '_', '_', '_', '_']
+
     ]
 
     start_pos = Position(board, 'W')
@@ -279,6 +432,9 @@ def generate_starting_position():
 if __name__ == "__main__":
     depth = 5
     start_pos = generate_starting_position()
+
+    # start_pos.enPassFrom = [(3, 1)]
+    # start_pos.enPassTo = (2, 0)
 
     # print(coords_to_square(4, 5))
 
