@@ -2,7 +2,7 @@ from collections import deque
 import time
 
 
-absolute_score = 100
+absolute_score = 1000
 
 class Position:
     def __init__(self, board, move, score=None):
@@ -10,6 +10,27 @@ class Position:
         self.move = move
         self.winner = '_'
         self.score = score
+        self.boardList = {
+            'W': {
+                'K': [(0, 3)],
+                'Q': [(0, 4)],
+                'R': [(0, 0), (0, 7)],
+                'B': [(0, 2), (0, 5)],
+                'N': [(0, 1), (0, 6)],
+                'P': [(1, 0), (1, 1), (1, 2), (1, 3), (1, 4), (1, 5), (1, 6), (1, 7)]
+            },
+            'B': {
+                'K': [(7, 3)],
+                'Q': [(7, 4)],
+                'R': [(7, 0), (7, 7)],
+                'B': [(7, 2), (7, 5)],
+                'N': [(7, 1), (7, 6)],
+                'P': [(6, 0), (6, 1), (6, 2), (6, 3), (6, 4), (6, 5), (6, 6), (6, 7)]
+            }
+        }
+
+    def __getitem__(self, item):
+        return item
 
     def printBoard(self):
         for row in self.board:
@@ -28,39 +49,9 @@ class Node:
         return self.position
 
 
-def is_winning_position(position):
-    pass
-
-
-def print_tree(tree):
-    queue = deque()
-    queue.append(tree)
-
-    w = 0
-    b = 0
-
-    level = 0
-    while queue:
-        level_size = len(queue)
-        print(f"Level {level}:")
-
-        for _ in range(level_size):
-            node = queue.popleft()
-            node.position.printBoard()
-            print("Winner: ", node.position.winner)
-            print("To move: ", node.position.move)
-            if node.position.score:
-                print("Score: ", node.position.score)
-            if node.position.winner == 'B':
-                b += 1
-            elif node.position.winner == 'W':
-                w += 1
-            print()
-            queue.extend(node.children)
-
-        level += 1
-
-    print("W: ", w, " B: ", b)
+def coords_to_square(i, j):
+    letters = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h']
+    return letters[j] + (str) (i + 1)
 
 
 def moves(piece_symbol):
@@ -103,20 +94,14 @@ def moves(piece_symbol):
     return moveset[piece_symbol]
 
 
-def pieces_score(piece, i, j):
+def pieces_score(piece):
     scores = {
-        'WK': 0,
-        'BK': 0,
-        'WQ': 0,
-        'BQ': 0,
-        'WR': 0,
-        'BR': 0,
-        'WN': 0,
-        'BN': 0,
-        'WB': 0,
-        'BB': 0,
-        'WP': 0,
-        'BP': 0
+        'K': 10000,
+        'Q': 9,
+        'R': 5,
+        'N': 3,
+        'B': 3,
+        'P': 1
     }
 
     return scores[piece]
@@ -131,9 +116,9 @@ def position_score(position):
             if piece == '_':
                 continue
             if piece[0] == 'W':
-                score += pieces_score(piece, i, j)
+                score += pieces_score(piece)
             else:
-                score -= pieces_score(piece, i, j)
+                score -= pieces_score(piece)
 
     return score
 
@@ -143,12 +128,13 @@ def minimax_with_tree_generation(position, depth, alpha=float('-inf'), beta=floa
 
     global absolute_score
 
-    if position.winner == 'W':
-        return None, absolute_score if isRoot else absolute_score  # White wins
-    elif position.winner == 'B':
-        return None, -absolute_score if isRoot else -absolute_score  # Black wins
-    elif depth == 0:
-        score = position_score(position)
+    score = position_score(position)
+
+    if score > absolute_score:
+        position.winner = 'W'  # White wins
+    elif score < -absolute_score:
+        position.winner = 'B'  # Black wins
+    elif depth == 0 or position.winner != '_':
         return None, score if isRoot else score
 
     color = position.move
@@ -192,29 +178,27 @@ def minimax_with_tree_generation(position, depth, alpha=float('-inf'), beta=floa
 def generate_next_possible_positions(position, isCheck=False):
 
     color = position.move
-    board = position.getBoard()
+    board = position.board
     won = True
     result = []
 
-    for i in range(position.m):
-        for j in range(position.n):
-            if board[i][j] != color:
-                continue
-            for dx, dy in [(-1, 0), (1, 0), (0, -1), (0, 1)]:
-                ni, nj = i + dx, j + dy
-                if 0 <= ni < position.m and 0 <= nj < position.n:
-                    if board[ni][nj] not in ('_', color):
-                        won = False
-                        temp = [row[:] for row in board]
-                        temp[ni][nj] = color
-                        temp[i][j] = '_'
-
-                        new_position = Position(temp, 'W' if color == 'B' else 'B')
-                        if is_winning_position(new_position):
-                            new_position.winner = color
-
-                        new_position.score = position_score(new_position)
-                        result.append(Node(new_position))
+    # for i in range(position.m):
+    #     for j in range(position.n):
+    #         if board[i][j] != color:
+    #             continue
+    #         for dx, dy in [(-1, 0), (1, 0), (0, -1), (0, 1)]:
+    #             ni, nj = i + dx, j + dy
+    #             if 0 <= ni < position.m and 0 <= nj < position.n:
+    #                 if board[ni][nj] not in ('_', color):
+    #                     won = False
+    #                     temp = [row[:] for row in board]
+    #                     temp[ni][nj] = color
+    #                     temp[i][j] = '_'
+    #
+    #                     new_position = Position(temp, 'W' if color == 'B' else 'B')
+    #
+    #                     new_position.score = position_score(new_position)
+    #                     result.append(Node(new_position))
 
     return result, won
 
@@ -223,9 +207,6 @@ def play(position, depth):
 
     position.printBoard()
     print()
-
-    if is_winning_position(position):
-        return 'W' if position.move == 'B' else 'B'
 
     best_move, _ = minimax_with_tree_generation(position, depth,
                                                 float('-inf'), float('inf'),
