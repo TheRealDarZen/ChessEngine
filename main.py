@@ -1,15 +1,18 @@
-from collections import deque
+import copy
 import time
 
 
 absolute_score = 1000
 
 class Position:
-    def __init__(self, board, move, score=None):
+    def __init__(self, board, move, last_move=None, score=None):
         self.board = board
         self.move = move
+        self.last_move = last_move
         self.winner = '_'
         self.score = score
+        self.enPassFrom = []
+        self.enPassTo = []
         self.boardList = {
             'W': {
                 'K': [(0, 3)],
@@ -50,13 +53,21 @@ class Node:
 
 
 def coords_to_square(i, j):
-    letters = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h']
+    letters = ['h', 'g', 'f', 'e', 'd', 'c', 'b', 'a']
     return letters[j] + (str) (i + 1)
 
 
 def moves(piece_symbol):
     moveset = {
-        'K': [[(0, 1), (0, -1), (1, 1), (1, 0), (1, -1), (-1, 1), (-1, 0), (-1, -1)]],
+        'K': [
+            [(0, 1)],
+            [(0, -1)],
+            [(1, 1)],
+            [(1, 0)],
+            [(1, -1)],
+            [(-1, 1)],
+            [(-1, 0)],
+            [(-1, -1)]],
         'Q': [
             [(1, 1), (2, 2), (3, 3), (4, 4), (5, 5), (6, 6), (7, 7)],
             [(-1, -1), (-2, -2), (-3, -3), (-4, -4), (-5, -5), (-6, -6), (-7, -7)],
@@ -95,7 +106,7 @@ def moves(piece_symbol):
 
 
 def pieces_score(piece):
-    scores = {
+    costs = {
         'K': 10000,
         'Q': 9,
         'R': 5,
@@ -104,21 +115,13 @@ def pieces_score(piece):
         'P': 1
     }
 
-    return scores[piece]
+    return costs[piece]
 
 
 def position_score(position):
     score = 0
 
-    for i in range(8):
-        for j in range(8):
-            piece = position[i][j]
-            if piece == '_':
-                continue
-            if piece[0] == 'W':
-                score += pieces_score(piece)
-            else:
-                score -= pieces_score(piece)
+    # TODO Score
 
     return score
 
@@ -140,11 +143,7 @@ def minimax_with_tree_generation(position, depth, alpha=float('-inf'), beta=floa
     color = position.move
     is_maximizing = (color == 'W')
 
-    next_positions, won = generate_next_possible_positions(position)
-
-    if won:
-        position.winner = 'B' if color == 'W' else 'W'
-        return None, absolute_score if color == 'W' else -absolute_score
+    next_positions = generate_next_possible_positions(position)
 
     if not next_positions:
         return None, -absolute_score if color == 'W' else absolute_score
@@ -175,11 +174,11 @@ def minimax_with_tree_generation(position, depth, alpha=float('-inf'), beta=floa
         return best_move, best_score if isRoot else best_score
 
 
-def generate_next_possible_positions(position, isCheck=False):
+def generate_next_possible_positions(position):
 
     color = position.move
     board = position.board
-    won = True
+    boardList = position.boardList
     result = []
 
     # for i in range(position.m):
@@ -200,7 +199,49 @@ def generate_next_possible_positions(position, isCheck=False):
     #                     new_position.score = position_score(new_position)
     #                     result.append(Node(new_position))
 
-    return result, won
+    for piece in boardList[color]:
+        for piecePos in boardList[color][piece]:
+            if piece != 'P':
+                allMoves = moves(piece)
+                for line in allMoves:
+                    for move in line:
+                        di, dj = move
+                        ni, nj = piecePos[0] + di, piecePos[1] + dj
+                        if 0 <= ni < 8 and 0 <= nj < 8:
+                            if board[ni][nj][0] == '_':
+                                # Board
+                                tempBoard = [row[:] for row in board]
+                                tempBoard[ni][nj] = (color + piece)
+                                tempBoard[piecePos[0]][piecePos[1]] = '_'
+
+                                # Board List
+                                tempBoardList = copy.deepcopy(boardList)
+                                tempBoardList[color][piece].remove((piecePos[0], piecePos[1]))
+                                tempBoardList[color][piece].append((ni, nj))
+
+                                new_position = Position(tempBoard, 'W' if color == 'B' else 'B', (piece, piecePos[0], piecePos[1], ni, nj))
+                                new_position.boardList = tempBoardList
+                                new_position.score = position_score(new_position)
+
+                                result.append(Node(new_position))
+
+                            elif board[ni][nj][0] == color:
+                                break
+
+                            else:
+                                break
+
+                        else:
+                            break
+            else:
+                if color == 'W':
+                    pass
+                elif color == 'B':
+                    pass
+                else:
+                    pass
+
+    return result
 
 
 def play(position, depth):
@@ -239,9 +280,16 @@ if __name__ == "__main__":
     depth = 5
     start_pos = generate_starting_position()
 
-    start_time_2 = time.time()
-    print("Winner optimized: ", play(start_pos, depth))
-    end_time_2 = time.time()
-    print(f"Execution time: {end_time_2 - start_time_2:.2f}s")
+    # print(coords_to_square(4, 5))
+
+    next = generate_next_possible_positions(start_pos)
+    for node in next:
+        node.position.printBoard()
+        print()
+
+    # start_time_2 = time.time()
+    # print("Winner optimized: ", play(start_pos, depth))
+    # end_time_2 = time.time()
+    # print(f"Execution time: {end_time_2 - start_time_2:.2f}s")
 
 
