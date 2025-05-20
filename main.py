@@ -50,18 +50,6 @@ class Position:
            print(*row, sep=' ')
 
 
-class Node:
-    def __init__(self, position):
-        self.position = position
-        self.children = []
-
-    def add_child(self, child_node):
-        self.children.append(child_node)
-
-    def getPosition(self):
-        return self.position
-
-
 def coords_to_square(i, j):
     letters = ['h', 'g', 'f', 'e', 'd', 'c', 'b', 'a']
     if i == -1 and j == -1:
@@ -356,7 +344,7 @@ def generate_next_possible_positions(position):
                                     print()
                                     new_position.printBoard()
                                 if not is_under_attack(new_position, color, ti, tj):
-                                    result.append(Node(new_position))
+                                    result.append(new_position)
 
                                 if opPiece:
                                     break
@@ -423,7 +411,7 @@ def generate_next_possible_positions(position):
 
                             ti, tj = new_position.boardList[color]['K'][0]
                             if not is_under_attack(new_position, color, ti, tj):
-                                result.append(Node(new_position))
+                                result.append(new_position)
 
                 # Black
                 else:
@@ -474,7 +462,7 @@ def generate_next_possible_positions(position):
 
                             ti, tj = new_position.boardList[color]['K'][0]
                             if not is_under_attack(new_position, color, ti, tj):
-                                result.append(Node(new_position))
+                                result.append(new_position)
 
     # Castles
     if color not in position.movedKings:
@@ -496,7 +484,7 @@ def generate_next_possible_positions(position):
                     new_position.availRooks.remove((0, 0))
                     new_position.score = position_score(new_position)
 
-                    result.append(Node(new_position))
+                    result.append(new_position)
 
             # Long Castle
             if board[0][3] == 'WK' and board[0][7] == 'WR' and board[0][4] == '_' and board[0][5] == '_' and board[0][6] == '_' and (0, 7) in position.availRooks:
@@ -514,7 +502,7 @@ def generate_next_possible_positions(position):
                     new_position.availRooks.remove((0, 7))
                     new_position.score = position_score(new_position)
 
-                    result.append(Node(new_position))
+                    result.append(new_position)
 
         else:
             # Short Castle
@@ -534,7 +522,7 @@ def generate_next_possible_positions(position):
                     new_position.availRooks.remove((7, 0))
                     new_position.score = position_score(new_position)
 
-                    result.append(Node(new_position))
+                    result.append(new_position)
 
             # Long Castle
             if board[7][3] == 'BK' and board[7][7] == 'BR' and board[7][4] == '_' and board[7][5] == '_' and board[7][
@@ -554,7 +542,7 @@ def generate_next_possible_positions(position):
                     new_position.availRooks.remove((7, 7))
                     new_position.score = position_score(new_position)
 
-                    result.append(Node(new_position))
+                    result.append(new_position)
 
 
     return result
