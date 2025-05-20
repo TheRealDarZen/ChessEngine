@@ -4,7 +4,11 @@ import time
 absolute_score = 1000
 
 class Position:
-    def __init__(self, board, move, last_move=None, score=0.0, movedKings=[], availRooks=[]):
+    def __init__(self, board, move, last_move=None, score=0.0, movedKings=None, availRooks=None):
+        if movedKings is None:
+            movedKings = []
+        if availRooks is None:
+            availRooks = [(0, 0), (0, 7), (7, 0), (7, 7)]
         self.board = board
         self.move = move
         self.last_move = last_move
@@ -13,6 +17,7 @@ class Position:
         self.enPassFrom = []
         self.enPassTo = None
         self.movedKings = movedKings
+        self.availRooks = availRooks
         self.boardList = {
             'W': {
                 'K': [],
@@ -120,15 +125,15 @@ def is_under_attack(position, color, i, j):
     # Pawns
     if attacker_color == 'W':
         if i < 7:
-            if j > 0 and board[i + 1][j - 1] == 'WP':
+            if j > 0 and board[i - 1][j - 1] == 'WP':
                 return True
-            if j < 7 and board[i + 1][j + 1] == 'WP':
+            if j < 7 and board[i - 1][j + 1] == 'WP':
                 return True
     else:
         if i > 0:
-            if j > 0 and board[i - 1][j - 1] == 'BP':
+            if j > 0 and board[i + 1][j - 1] == 'BP':
                 return True
-            if j < 7 and board[i - 1][j + 1] == 'BP':
+            if j < 7 and board[i + 1][j + 1] == 'BP':
                 return True
 
     # Knights
@@ -333,15 +338,22 @@ def generate_next_possible_positions(position):
                                 tempBoard[ni][nj] = (color + piece)
                                 tempBoard[piecePos[0]][piecePos[1]] = '_'
 
-                                new_position = Position(tempBoard, 'W' if color == 'B' else 'B', (piece, piecePos[0], piecePos[1], ni, nj, position.movedKings))
-                                new_position.score = position_score(new_position)
+                                new_position = Position(tempBoard, 'W' if color == 'B' else 'B', (piece, piecePos[0], piecePos[1],
+                                                                                                  ni, nj), position.movedKings, position.availRooks)
+
                                 if piece == 'K':
                                     new_position.movedKings.append(color)
+                                elif piece == 'R':
+                                    if piecePos in position.availRooks:
+                                        new_position.availRooks.remove(piecePos)
+
+                                new_position.score = position_score(new_position)
 
                                 try:
                                     ti, tj = new_position.boardList[color]['K'][0]
                                 except:
                                     position.printBoard()
+                                    print()
                                     new_position.printBoard()
                                 if not is_under_attack(new_position, color, ti, tj):
                                     result.append(Node(new_position))
@@ -404,12 +416,14 @@ def generate_next_possible_positions(position):
                             tempBoard[piecePos[0]][piecePos[1]] = '_'
 
                             new_position = Position(tempBoard, 'B',
-                                                    ('P', piecePos[0], piecePos[1], ni, nj, position.movedKings))
+                                                    ('P', piecePos[0], piecePos[1], ni, nj), position.movedKings, position.availRooks)
                             new_position.enPassFrom = tempEnPassFrom
                             new_position.enPassTo = tempEnPassTo
                             new_position.score = position_score(new_position)
 
-                            result.append(Node(new_position))
+                            ti, tj = new_position.boardList[color]['K'][0]
+                            if not is_under_attack(new_position, color, ti, tj):
+                                result.append(Node(new_position))
 
                 # Black
                 else:
@@ -453,19 +467,20 @@ def generate_next_possible_positions(position):
                             tempBoard[piecePos[0]][piecePos[1]] = '_'
 
                             new_position = Position(tempBoard, 'W',
-                                                    ('P', piecePos[0], piecePos[1], ni, nj, position.movedKings))
+                                                    ('P', piecePos[0], piecePos[1], ni, nj), position.movedKings, position.availRooks)
                             new_position.enPassFrom = tempEnPassFrom
                             new_position.enPassTo = tempEnPassTo
                             new_position.score = position_score(new_position)
 
-                            result.append(Node(new_position))
+                            ti, tj = new_position.boardList[color]['K'][0]
+                            if not is_under_attack(new_position, color, ti, tj):
+                                result.append(Node(new_position))
 
-    # TODO Rooks for castle !!!
     # Castles
     if color not in position.movedKings:
         if color == 'W':
             # Short Castle
-            if board[0][3] == 'WK' and board[0][0] == 'WR' and board[0][1] == '_' and board[0][2] == '_':
+            if board[0][3] == 'WK' and board[0][0] == 'WR' and board[0][1] == '_' and board[0][2] == '_' and (0, 0) in position.availRooks:
                 if (not is_under_attack(position, color, 0, 1) and not is_under_attack(position, color, 0, 2)
                         and not is_under_attack(position, color,0, 3)):
                     # Board
@@ -476,14 +491,15 @@ def generate_next_possible_positions(position):
                     tempBoard[0][3] = '_'
 
                     new_position = Position(tempBoard, 'W' if color == 'B' else 'B',
-                                            ('O-O', -1, -1, -1, -1, position.movedKings))
+                                            ('O-O', -1, -1, -1, -1), position.movedKings, position.availRooks)
                     new_position.movedKings.append(color)
+                    new_position.availRooks.remove((0, 0))
                     new_position.score = position_score(new_position)
 
                     result.append(Node(new_position))
 
             # Long Castle
-            if board[0][3] == 'WK' and board[0][7] == 'WR' and board[0][4] == '_' and board[0][5] == '_' and board[0][6] == '_':
+            if board[0][3] == 'WK' and board[0][7] == 'WR' and board[0][4] == '_' and board[0][5] == '_' and board[0][6] == '_' and (0, 7) in position.availRooks:
                 if not is_under_attack(position, color,0, 3) and not is_under_attack(position, color,0, 4) and not is_under_attack(position, color,0, 5):
                     # Board
                     tempBoard = [row[:] for row in board]
@@ -493,15 +509,16 @@ def generate_next_possible_positions(position):
                     tempBoard[0][7] = '_'
 
                     new_position = Position(tempBoard, 'W' if color == 'B' else 'B',
-                                            ('O-O-O', -1, -1, -1, -1, position.movedKings))
+                                            ('O-O-O', -1, -1, -1, -1), position.movedKings, position.availRooks)
                     new_position.movedKings.append(color)
+                    new_position.availRooks.remove((0, 7))
                     new_position.score = position_score(new_position)
 
                     result.append(Node(new_position))
 
         else:
             # Short Castle
-            if board[7][3] == 'BK' and board[7][0] == 'BR' and board[7][1] == '_' and board[7][2] == '_':
+            if board[7][3] == 'BK' and board[7][0] == 'BR' and board[7][1] == '_' and board[7][2] == '_' and (7, 0) in position.availRooks:
                 if not is_under_attack(position, color, 7, 1) and not is_under_attack(position, color,7, 2) and not is_under_attack(
                         position, color,7, 3):
                     # Board
@@ -512,15 +529,16 @@ def generate_next_possible_positions(position):
                     tempBoard[7][3] = '_'
 
                     new_position = Position(tempBoard, 'W' if color == 'B' else 'B',
-                                            ('O-O', -1, -1, -1, -1, position.movedKings))
+                                            ('O-O', -1, -1, -1, -1), position.movedKings, position.availRooks)
                     new_position.movedKings.append(color)
+                    new_position.availRooks.remove((7, 0))
                     new_position.score = position_score(new_position)
 
                     result.append(Node(new_position))
 
             # Long Castle
             if board[7][3] == 'BK' and board[7][7] == 'BR' and board[7][4] == '_' and board[7][5] == '_' and board[7][
-                6] == '_':
+                6] == '_' and (7, 7) in position.availRooks:
                 if not is_under_attack(position, color,7, 3) and not is_under_attack(position, color,7, 4) and not is_under_attack(
                         position, color,7, 5):
                     # Board
@@ -531,7 +549,9 @@ def generate_next_possible_positions(position):
                     tempBoard[7][7] = '_'
 
                     new_position = Position(tempBoard, 'W' if color == 'B' else 'B',
-                                            ('O-O-O', -1, -1, -1, -1, position.movedKings))
+                                            ('O-O-O', -1, -1, -1, -1), position.movedKings, position.availRooks)
+                    new_position.movedKings.append(color)
+                    new_position.availRooks.remove((7, 7))
                     new_position.score = position_score(new_position)
 
                     result.append(Node(new_position))
@@ -569,14 +589,14 @@ def generate_starting_position():
         ['BP', 'BP', 'BP', 'BP', 'BP', 'BP', 'BP', 'BP'],
         ['BR', 'BN', 'BB', 'BK', 'BQ', 'BB', 'BN', 'BR']
 
-        # ['WR', '_', '_', 'WK', '_', '_', '_', '_'],
+        # ['WR', 'WN', 'WB', 'WK', 'WQ', 'WB', 'WN', 'WR'],
+        # ['WP', 'WP', 'WP', 'WP', 'WP', 'WP', 'WP', 'WP'],
         # ['_', '_', '_', '_', '_', '_', '_', '_'],
         # ['_', '_', '_', '_', '_', '_', '_', '_'],
-        # ['_', '_', '_', '_', '_', '_', '_', '_'],
-        # ['_', '_', '_', '_', '_', '_', '_', '_'],
-        # ['_', '_', '_', '_', '_', '_', '_', '_'],
-        # ['_', '_', '_', '_', '_', '_', '_', '_'],
-        # ['_', '_', '_', '_', 'BQ', '_', '_', 'BK']
+        # ['WQ', '_', '_', '_', '_', '_', '_', '_'],
+        # ['_', '_', 'BP', '_', '_', '_', '_', '_'],
+        # ['BP', 'BP', '_', 'BP', 'BP', 'BP', 'BP', 'BP'],
+        # ['BR', 'BN', 'BB', 'BK', 'BQ', 'BB', 'BN', 'BR']
 
     ]
 
@@ -585,7 +605,7 @@ def generate_starting_position():
 
 
 if __name__ == "__main__":
-    depth = 5
+    depth = 4
     start_pos = generate_starting_position()
 
     # start_pos.enPassFrom = [(3, 1)]
