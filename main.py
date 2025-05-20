@@ -1,11 +1,10 @@
-import copy
 import time
 
 
 absolute_score = 1000
 
 class Position:
-    def __init__(self, board, move, last_move=None, score=None):
+    def __init__(self, board, move, last_move=None, score=0.0, movedKings=[], availRooks=[]):
         self.board = board
         self.move = move
         self.last_move = last_move
@@ -13,34 +12,30 @@ class Position:
         self.score = score
         self.enPassFrom = []
         self.enPassTo = None
+        self.movedKings = movedKings
         self.boardList = {
             'W': {
-                'K': [(0, 3)],
-                'Q': [(0, 4)],
-                'R': [(0, 0), (0, 7)],
-                'B': [(0, 2), (0, 5)],
-                'N': [(0, 1), (0, 6)],
-                'P': [(1, 0), (1, 1), (1, 2), (1, 3), (1, 4), (1, 5), (1, 6), (1, 7)]
-
-                # 'P': [(3, 0)],
-                # 'Q': [],
-                # 'R': [(2, 2)],
-                # 'B': [],
-                # 'N': [],
+                'K': [],
+                'Q': [],
+                'R': [],
+                'B': [],
+                'N': [],
+                'P': []
             },
             'B': {
-                'K': [(7, 3)],
-                'Q': [(7, 4)],
-                'R': [(7, 0), (7, 7)],
-                'B': [(7, 2), (7, 5)],
-                'N': [(7, 1), (7, 6)],
-                'P': [(6, 0), (6, 1), (6, 2), (6, 3), (6, 4), (6, 5), (6, 6), (6, 7)]
-
-                # 'N': [],
-                # 'B': [],
-                # 'P': [(3, 1)]
+                'K': [],
+                'Q': [],
+                'R': [],
+                'B': [],
+                'N': [],
+                'P': []
             }
         }
+        for i in range(8):
+            for j in range(8):
+                if board[i][j] == '_':
+                    continue
+                self.boardList[board[i][j][0]][board[i][j][1]].append((i, j))
 
     def __getitem__(self, item):
         return item
@@ -64,6 +59,8 @@ class Node:
 
 def coords_to_square(i, j):
     letters = ['h', 'g', 'f', 'e', 'd', 'c', 'b', 'a']
+    if i == -1 and j == -1:
+        return ''
     return letters[j] + (str) (i + 1)
 
 
@@ -115,6 +112,91 @@ def moves(piece_symbol):
     return moveset[piece_symbol]
 
 
+def is_under_attack(position, color, i, j):
+
+    attacker_color = 'B' if color == 'W' else 'W'
+    board = position.board
+
+    # Pawns
+    if attacker_color == 'W':
+        if i < 7:
+            if j > 0 and board[i + 1][j - 1] == 'WP':
+                return True
+            if j < 7 and board[i + 1][j + 1] == 'WP':
+                return True
+    else:
+        if i > 0:
+            if j > 0 and board[i - 1][j - 1] == 'BP':
+                return True
+            if j < 7 and board[i - 1][j + 1] == 'BP':
+                return True
+
+    # Knights
+    knight_moves = [
+        (1, 2), (2, 1), (-1, 2), (-2, 1),
+        (1, -2), (2, -1), (-1, -2), (-2, -1)
+    ]
+
+    for di, dj in knight_moves:
+        ni, nj = i + di, j + dj
+        if 0 <= ni < 8 and 0 <= nj < 8:
+            if board[ni][nj] == attacker_color + 'N':
+                return True
+
+    # King
+    king_moves = [
+        (0, 1), (0, -1), (1, 1), (1, 0),
+        (1, -1), (-1, 1), (-1, 0), (-1, -1)
+    ]
+
+    for di, dj in king_moves:
+        ni, nj = i + di, j + dj
+        if 0 <= ni < 8 and 0 <= nj < 8:
+            if board[ni][nj] == attacker_color + 'K':
+                return True
+
+    # Directional vectors
+    rook_directions = [
+        (0, 1),  # right
+        (1, 0),  # down
+        (0, -1),  # left
+        (-1, 0)  # up
+    ]
+
+    bishop_directions = [
+        (1, 1),  # down-right
+        (1, -1),  # down-left
+        (-1, -1),  # up-left
+        (-1, 1)  # up-right
+    ]
+
+    # Horizontal, Vertical
+    for di, dj in rook_directions:
+        for step in range(1, 8):
+            ni, nj = i + di * step, j + dj * step
+            if 0 <= ni < 8 and 0 <= nj < 8:
+                if board[ni][nj] == attacker_color + 'R' or board[ni][nj] == attacker_color + 'Q':
+                    return True
+                elif board[ni][nj] != '_':
+                    break
+            else:
+                break
+
+    # Diagonal
+    for di, dj in bishop_directions:
+        for step in range(1, 8):
+            ni, nj = i + di * step, j + dj * step
+            if 0 <= ni < 8 and 0 <= nj < 8:
+                if board[ni][nj] == attacker_color + 'B' or board[ni][nj] == attacker_color + 'Q':
+                    return True
+                elif board[ni][nj] != '_':
+                    break
+            else:
+                break
+
+    return False
+
+
 def pieces_score(piece):
     costs = {
         'K': 10000,
@@ -130,8 +212,22 @@ def pieces_score(piece):
 
 def position_score(position):
     score = 0
+    board = position.board
 
-    # TODO Score
+    for i in range(8):
+        for j in range(8):
+            if board[i][j] == '_':
+                continue
+            piece = board[i][j][1]
+            temp = pieces_score(piece)
+            if piece != 'P':
+                temp -= ((abs(i - 5) + abs(j - 5)) if position.move == 'W' else (abs(i - 4) + abs(j - 4))) * 0.01
+            else:
+                temp -= ((abs(i - 7)) if position.move == 'W' else (abs(i))) * 0.02
+            if board[i][j][0] == 'W':
+                score += temp
+            else:
+                score -= temp
 
     return score
 
@@ -141,22 +237,26 @@ def minimax_with_tree_generation(position, depth, alpha=float('-inf'), beta=floa
 
     global absolute_score
 
-    score = position_score(position)
+    #print("Depth: ", depth)
 
-    if score > absolute_score:
-        position.winner = 'W'  # White wins
-    elif score < -absolute_score:
-        position.winner = 'B'  # Black wins
-    elif depth == 0 or position.winner != '_':
-        return None, score if isRoot else score
+    score = position.score
 
     color = position.move
     is_maximizing = (color == 'W')
 
     next_positions = generate_next_possible_positions(position)
 
+    # Mate / Stalemate
     if not next_positions:
-        return None, -absolute_score if color == 'W' else absolute_score
+        ti, tj = position.boardList[color]['K'][0]
+        if is_under_attack(position, color, ti, tj):
+            score = absolute_score if color == 'W' else -absolute_score
+        else:
+            score = 0.0
+        return None, score if isRoot else score
+
+    if depth <= 0:
+        return None, score if isRoot else score
 
     best_move = None
 
@@ -224,24 +324,27 @@ def generate_next_possible_positions(position):
                                 if board[ni][nj] != '_': # Other piece
                                     opPiece = True
 
+                                if piece == 'K':
+                                    if is_under_attack(position, color, ni, nj): # Attacked square
+                                        break
+
                                 # Board
                                 tempBoard = [row[:] for row in board]
                                 tempBoard[ni][nj] = (color + piece)
                                 tempBoard[piecePos[0]][piecePos[1]] = '_'
 
-                                # Board List
-                                tempBoardList = copy.deepcopy(boardList)
-                                tempBoardList[color][piece].remove((piecePos[0], piecePos[1]))
-                                tempBoardList[color][piece].append((ni, nj))
-
-                                if opPiece: # remove other piece
-                                    tempBoardList[board[ni][nj][0]][board[ni][nj][1]].remove((ni, nj))
-
-                                new_position = Position(tempBoard, 'W' if color == 'B' else 'B', (piece, piecePos[0], piecePos[1], ni, nj))
-                                new_position.boardList = tempBoardList
+                                new_position = Position(tempBoard, 'W' if color == 'B' else 'B', (piece, piecePos[0], piecePos[1], ni, nj, position.movedKings))
                                 new_position.score = position_score(new_position)
+                                if piece == 'K':
+                                    new_position.movedKings.append(color)
 
-                                result.append(Node(new_position))
+                                try:
+                                    ti, tj = new_position.boardList[color]['K'][0]
+                                except:
+                                    position.printBoard()
+                                    new_position.printBoard()
+                                if not is_under_attack(new_position, color, ti, tj):
+                                    result.append(Node(new_position))
 
                                 if opPiece:
                                     break
@@ -300,21 +403,8 @@ def generate_next_possible_positions(position):
                             tempBoard[ni][nj] = (color + tp)
                             tempBoard[piecePos[0]][piecePos[1]] = '_'
 
-                            # Board List
-                            tempBoardList = copy.deepcopy(boardList)
-                            tempBoardList[color][piece].remove((piecePos[0], piecePos[1]))
-                            tempBoardList[color][tp].append((ni, nj))
-
-                            if ni - piecePos[0] != 0 and nj - piecePos[1] != 0: # remove other piece
-                                if board[ni][nj] != '_':
-                                    tempBoardList[board[ni][nj][0]][board[ni][nj][1]].remove((ni, nj))
-                                else:
-                                    tempBoardList[board[ni - 1][nj][0]][board[ni - 1][nj][1]].remove((ni - 1, nj))
-                                    tempBoard[ni - 1][nj] = '_'
-
                             new_position = Position(tempBoard, 'B',
-                                                    (piece, piecePos[0], piecePos[1], ni, nj))
-                            new_position.boardList = tempBoardList
+                                                    ('P', piecePos[0], piecePos[1], ni, nj, position.movedKings))
                             new_position.enPassFrom = tempEnPassFrom
                             new_position.enPassTo = tempEnPassTo
                             new_position.score = position_score(new_position)
@@ -362,44 +452,109 @@ def generate_next_possible_positions(position):
                             tempBoard[ni][nj] = (color + tp)
                             tempBoard[piecePos[0]][piecePos[1]] = '_'
 
-                            # Board List
-                            tempBoardList = copy.deepcopy(boardList)
-                            tempBoardList[color][piece].remove((piecePos[0], piecePos[1]))
-                            tempBoardList[color][tp].append((ni, nj))
-
-                            if ni - piecePos[0] != 0 and nj - piecePos[1] != 0:  # remove other piece
-                                if board[ni][nj] != '_':
-                                    tempBoardList[board[ni][nj][0]][board[ni][nj][1]].remove((ni, nj))
-                                else:
-                                    tempBoardList[board[ni + 1][nj][0]][board[ni + 1][nj][1]].remove((ni + 1, nj))
-                                    tempBoard[ni + 1][nj] = '_'
-
                             new_position = Position(tempBoard, 'W',
-                                                    (piece, piecePos[0], piecePos[1], ni, nj))
-                            new_position.boardList = tempBoardList
+                                                    ('P', piecePos[0], piecePos[1], ni, nj, position.movedKings))
                             new_position.enPassFrom = tempEnPassFrom
                             new_position.enPassTo = tempEnPassTo
                             new_position.score = position_score(new_position)
 
                             result.append(Node(new_position))
 
+    # TODO Rooks for castle !!!
+    # Castles
+    if color not in position.movedKings:
+        if color == 'W':
+            # Short Castle
+            if board[0][3] == 'WK' and board[0][0] == 'WR' and board[0][1] == '_' and board[0][2] == '_':
+                if (not is_under_attack(position, color, 0, 1) and not is_under_attack(position, color, 0, 2)
+                        and not is_under_attack(position, color,0, 3)):
+                    # Board
+                    tempBoard = [row[:] for row in board]
+                    tempBoard[0][1] = 'WK'
+                    tempBoard[0][2] = 'WR'
+                    tempBoard[0][0] = '_'
+                    tempBoard[0][3] = '_'
+
+                    new_position = Position(tempBoard, 'W' if color == 'B' else 'B',
+                                            ('O-O', -1, -1, -1, -1, position.movedKings))
+                    new_position.movedKings.append(color)
+                    new_position.score = position_score(new_position)
+
+                    result.append(Node(new_position))
+
+            # Long Castle
+            if board[0][3] == 'WK' and board[0][7] == 'WR' and board[0][4] == '_' and board[0][5] == '_' and board[0][6] == '_':
+                if not is_under_attack(position, color,0, 3) and not is_under_attack(position, color,0, 4) and not is_under_attack(position, color,0, 5):
+                    # Board
+                    tempBoard = [row[:] for row in board]
+                    tempBoard[0][5] = 'WK'
+                    tempBoard[0][4] = 'WR'
+                    tempBoard[0][0] = '_'
+                    tempBoard[0][7] = '_'
+
+                    new_position = Position(tempBoard, 'W' if color == 'B' else 'B',
+                                            ('O-O-O', -1, -1, -1, -1, position.movedKings))
+                    new_position.movedKings.append(color)
+                    new_position.score = position_score(new_position)
+
+                    result.append(Node(new_position))
+
+        else:
+            # Short Castle
+            if board[7][3] == 'BK' and board[7][0] == 'BR' and board[7][1] == '_' and board[7][2] == '_':
+                if not is_under_attack(position, color, 7, 1) and not is_under_attack(position, color,7, 2) and not is_under_attack(
+                        position, color,7, 3):
+                    # Board
+                    tempBoard = [row[:] for row in board]
+                    tempBoard[7][1] = 'BK'
+                    tempBoard[7][2] = 'BR'
+                    tempBoard[7][0] = '_'
+                    tempBoard[7][3] = '_'
+
+                    new_position = Position(tempBoard, 'W' if color == 'B' else 'B',
+                                            ('O-O', -1, -1, -1, -1, position.movedKings))
+                    new_position.movedKings.append(color)
+                    new_position.score = position_score(new_position)
+
+                    result.append(Node(new_position))
+
+            # Long Castle
+            if board[7][3] == 'BK' and board[7][7] == 'BR' and board[7][4] == '_' and board[7][5] == '_' and board[7][
+                6] == '_':
+                if not is_under_attack(position, color,7, 3) and not is_under_attack(position, color,7, 4) and not is_under_attack(
+                        position, color,7, 5):
+                    # Board
+                    tempBoard = [row[:] for row in board]
+                    tempBoard[7][5] = 'BK'
+                    tempBoard[7][4] = 'BR'
+                    tempBoard[7][0] = '_'
+                    tempBoard[7][7] = '_'
+
+                    new_position = Position(tempBoard, 'W' if color == 'B' else 'B',
+                                            ('O-O-O', -1, -1, -1, -1, position.movedKings))
+                    new_position.score = position_score(new_position)
+
+                    result.append(Node(new_position))
+
+
     return result
 
 
 def play(position, depth):
 
-    position.printBoard()
-    print()
+    if position.last_move:
+        piece, lf, nf, lt, nt = position.last_move
+        print((piece if piece != 'P' else '') + coords_to_square(lf, nf) + '-' + coords_to_square(lt, nt))
 
     best_move, _ = minimax_with_tree_generation(position, depth,
                                                 float('-inf'), float('inf'),
                                                 True)
 
-    if best_move is None:
-        print("No moves!")
-        return 'W' if position.move == 'B' else 'B'
+    if not(best_move):
+        print('No move')
+        return
 
-    return best_move.position
+    return play(best_move.position, depth)
 
 
 def generate_starting_position():
@@ -414,14 +569,14 @@ def generate_starting_position():
         ['BP', 'BP', 'BP', 'BP', 'BP', 'BP', 'BP', 'BP'],
         ['BR', 'BN', 'BB', 'BK', 'BQ', 'BB', 'BN', 'BR']
 
-        # ['_', '_', '_', '_', '_', '_', '_', '_'],
-        # ['_', '_', '_', '_', '_', '_', '_', '_'],
-        # ['_', '_', 'WR', '_', '_', '_', '_', '_'],
-        # ['WP', 'BP', '_', '_', '_', '_', '_', '_'],
+        # ['WR', '_', '_', 'WK', '_', '_', '_', '_'],
         # ['_', '_', '_', '_', '_', '_', '_', '_'],
         # ['_', '_', '_', '_', '_', '_', '_', '_'],
         # ['_', '_', '_', '_', '_', '_', '_', '_'],
-        # ['_', '_', '_', '_', '_', '_', '_', '_']
+        # ['_', '_', '_', '_', '_', '_', '_', '_'],
+        # ['_', '_', '_', '_', '_', '_', '_', '_'],
+        # ['_', '_', '_', '_', '_', '_', '_', '_'],
+        # ['_', '_', '_', '_', 'BQ', '_', '_', 'BK']
 
     ]
 
@@ -438,14 +593,16 @@ if __name__ == "__main__":
 
     # print(coords_to_square(4, 5))
 
-    next = generate_next_possible_positions(start_pos)
-    for node in next:
-        node.position.printBoard()
-        print()
+    # start_pos.printBoard()
+
+    # next = generate_next_possible_positions(start_pos)
+    # for node in next:
+    #     node.position.printBoard()
+    #     print()
 
     # start_time_2 = time.time()
     # print("Winner optimized: ", play(start_pos, depth))
     # end_time_2 = time.time()
     # print(f"Execution time: {end_time_2 - start_time_2:.2f}s")
 
-
+    play(start_pos, depth)
