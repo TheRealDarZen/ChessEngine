@@ -4,11 +4,16 @@ import time
 absolute_score = 1000
 
 class Position:
-    def __init__(self, board, move, last_move=None, movedKings=None, availRooks=None, transform=None):
+    def __init__(self, board, move, last_move=None, movedKings=None, availRooks=None, kings_coords=None, transform=None):
         if movedKings is None:
             movedKings = []
         if availRooks is None:
             availRooks = [(0, 0), (0, 7), (7, 0), (7, 7)]
+        if kings_coords is None:
+            kings_coords = {
+                'W': (0, 3),
+                'B': (7, 3)
+            }
         self.board = board
         self.move = move
         self.last_move = last_move
@@ -17,31 +22,32 @@ class Position:
         self.enPassTo = None
         self.movedKings = movedKings
         self.availRooks = availRooks
+        self.kings_coords = kings_coords
         self.transform = transform
         self.score = 0.0
-        self.boardList = {
-            'W': {
-                'K': [],
-                'Q': [],
-                'R': [],
-                'B': [],
-                'N': [],
-                'P': []
-            },
-            'B': {
-                'K': [],
-                'Q': [],
-                'R': [],
-                'B': [],
-                'N': [],
-                'P': []
-            }
-        }
-        for i in range(8):
-            for j in range(8):
-                if board[i][j] == '_':
-                    continue
-                self.boardList[board[i][j][0]][board[i][j][1]].append((i, j))
+        # self.boardList = {
+        #     'W': {
+        #         'K': [],
+        #         'Q': [],
+        #         'R': [],
+        #         'B': [],
+        #         'N': [],
+        #         'P': []
+        #     },
+        #     'B': {
+        #         'K': [],
+        #         'Q': [],
+        #         'R': [],
+        #         'B': [],
+        #         'N': [],
+        #         'P': []
+        #     }
+        # }
+        # for i in range(8):
+        #     for j in range(8):
+        #         if board[i][j] == '_':
+        #             continue
+        #         self.boardList[board[i][j][0]][board[i][j][1]].append((i, j))
 
     def __getitem__(self, item):
         return item
@@ -285,7 +291,7 @@ def generate_next_possible_positions(position):
 
     color = position.move
     board = position.board
-    boardList = position.boardList
+    # boardList = position.boardList
     result = []
 
     # for i in range(position.m):
@@ -306,8 +312,13 @@ def generate_next_possible_positions(position):
     #                     new_position.score = position_score(new_position)
     #                     result.append(Node(new_position))
 
-    for piece in boardList[color]:
-        for piecePos in boardList[color][piece]:
+    for i in range(8):
+        for j in range(8):
+            if board[i][j] == '_' or board[i][j][0] != color:
+                continue
+            piece = board[i][j][1]
+            piecePos = (i, j)
+
             if piece != 'P':
                 allMoves = moves(piece)
                 for line in allMoves:
@@ -330,22 +341,19 @@ def generate_next_possible_positions(position):
                                 tempBoard[ni][nj] = (color + piece)
                                 tempBoard[piecePos[0]][piecePos[1]] = '_'
 
-                                new_position = Position(tempBoard, 'W' if color == 'B' else 'B', (piece, piecePos[0], piecePos[1],
-                                                                                                  ni, nj), position.movedKings.copy(), position.availRooks.copy())
+                                new_position = Position(tempBoard, 'W' if color == 'B' else 'B',
+                                                        (piece, piecePos[0], piecePos[1], ni, nj),
+                                                        position.movedKings.copy(), position.availRooks.copy(), position.kings_coords.copy())
 
                                 if piece == 'K':
+                                    new_position.kings_coords[color] = (ni, nj)
                                     if color not in new_position.movedKings:
                                         new_position.movedKings.append(color)
                                 elif piece == 'R':
                                     if piecePos in position.availRooks:
                                         new_position.availRooks.remove(piecePos)
 
-                                try:
-                                    ti, tj = new_position.boardList[color]['K'][0]
-                                except:
-                                    position.printBoard()
-                                    print()
-                                    new_position.printBoard()
+                                ti, tj = new_position.kings_coords[color]
                                 if not is_under_attack(new_position, color, ti, tj):
                                     result.append(new_position)
 
@@ -408,12 +416,13 @@ def generate_next_possible_positions(position):
                             tempBoard[piecePos[0]][piecePos[1]] = '_'
 
                             new_position = Position(tempBoard, 'B',
-                                                    ('P', piecePos[0], piecePos[1], ni, nj), position.movedKings.copy(), position.availRooks.copy(),
+                                                    ('P', piecePos[0], piecePos[1], ni, nj),
+                                                    position.movedKings.copy(), position.availRooks.copy(), position.kings_coords.copy(),
                                                     tp if tp != 'P' else None)
                             new_position.enPassFrom = tempEnPassFrom
                             new_position.enPassTo = tempEnPassTo
 
-                            ti, tj = new_position.boardList[color]['K'][0]
+                            ti, tj = new_position.kings_coords[color]
                             if not is_under_attack(new_position, color, ti, tj):
                                 result.append(new_position)
 
@@ -460,12 +469,13 @@ def generate_next_possible_positions(position):
                             tempBoard[piecePos[0]][piecePos[1]] = '_'
 
                             new_position = Position(tempBoard, 'W',
-                                                    ('P', piecePos[0], piecePos[1], ni, nj), position.movedKings.copy(), position.availRooks.copy(),
+                                                    ('P', piecePos[0], piecePos[1], ni, nj),
+                                                    position.movedKings.copy(), position.availRooks.copy(), position.kings_coords.copy(),
                                                     tp if tp != 'P' else None)
                             new_position.enPassFrom = tempEnPassFrom
                             new_position.enPassTo = tempEnPassTo
 
-                            ti, tj = new_position.boardList[color]['K'][0]
+                            ti, tj = new_position.kings_coords[color]
                             if not is_under_attack(new_position, color, ti, tj):
                                 result.append(new_position)
 
@@ -484,7 +494,7 @@ def generate_next_possible_positions(position):
                     tempBoard[0][3] = '_'
 
                     new_position = Position(tempBoard, 'W' if color == 'B' else 'B',
-                                            ('O-O', -1, -1, -1, -1), position.movedKings.copy(), position.availRooks.copy())
+                                            ('O-O', -1, -1, -1, -1), position.movedKings.copy(), position.availRooks.copy(), position.kings_coords.copy())
                     new_position.movedKings.append(color)
                     new_position.availRooks.remove((0, 0))
 
@@ -501,7 +511,7 @@ def generate_next_possible_positions(position):
                     tempBoard[0][7] = '_'
 
                     new_position = Position(tempBoard, 'W' if color == 'B' else 'B',
-                                            ('O-O-O', -1, -1, -1, -1), position.movedKings.copy(), position.availRooks.copy())
+                                            ('O-O-O', -1, -1, -1, -1), position.movedKings.copy(), position.availRooks.copy(), position.kings_coords.copy())
                     new_position.movedKings.append(color)
                     new_position.availRooks.remove((0, 7))
 
@@ -520,7 +530,7 @@ def generate_next_possible_positions(position):
                     tempBoard[7][3] = '_'
 
                     new_position = Position(tempBoard, 'W' if color == 'B' else 'B',
-                                            ('O-O', -1, -1, -1, -1), position.movedKings.copy(), position.availRooks.copy())
+                                            ('O-O', -1, -1, -1, -1), position.movedKings.copy(), position.availRooks.copy(), position.kings_coords.copy())
                     new_position.movedKings.append(color)
                     new_position.availRooks.remove((7, 0))
 
@@ -539,7 +549,7 @@ def generate_next_possible_positions(position):
                     tempBoard[7][7] = '_'
 
                     new_position = Position(tempBoard, 'W' if color == 'B' else 'B',
-                                            ('O-O-O', -1, -1, -1, -1), position.movedKings.copy(), position.availRooks.copy())
+                                            ('O-O-O', -1, -1, -1, -1), position.movedKings.copy(), position.availRooks.copy(), position.kings_coords.copy())
                     new_position.movedKings.append(color)
                     new_position.availRooks.remove((7, 7))
 
@@ -576,23 +586,23 @@ def play(position, depth):
 def generate_starting_position():
     board = [
 
-        # ['WR', 'WN', 'WB', 'WK', 'WQ', 'WB', 'WN', 'WR'],
-        # ['WP', 'WP', 'WP', 'WP', 'WP', 'WP', 'WP', 'WP'],
-        # ['_', '_', '_', '_', '_', '_', '_', '_'],
-        # ['_', '_', '_', '_', '_', '_', '_', '_'],
-        # ['_', '_', '_', '_', '_', '_', '_', '_'],
-        # ['_', '_', '_', '_', '_', '_', '_', '_'],
-        # ['BP', 'BP', 'BP', 'BP', 'BP', 'BP', 'BP', 'BP'],
-        # ['BR', 'BN', 'BB', 'BK', 'BQ', 'BB', 'BN', 'BR']
+        ['WR', 'WN', 'WB', 'WK', 'WQ', 'WB', 'WN', 'WR'],
+        ['WP', 'WP', 'WP', 'WP', 'WP', 'WP', 'WP', 'WP'],
+        ['_', '_', '_', '_', '_', '_', '_', '_'],
+        ['_', '_', '_', '_', '_', '_', '_', '_'],
+        ['_', '_', '_', '_', '_', '_', '_', '_'],
+        ['_', '_', '_', '_', '_', '_', '_', '_'],
+        ['BP', 'BP', 'BP', 'BP', 'BP', 'BP', 'BP', 'BP'],
+        ['BR', 'BN', 'BB', 'BK', 'BQ', 'BB', 'BN', 'BR']
 
-        ['WR', '_', '_', 'WK', '_', '_', '_', 'WR'],
-        ['WP', '_', 'WP', '_', 'WP', '_', '_', 'WP'],
-        ['BP', 'WP', 'BP', '_', 'BP', '_', 'WP', 'BP'],
-        ['_', 'BP', '_', '_', '_', 'WP', 'BP', '_'],
-        ['_', '_', '_', '_', '_', 'BP', '_', '_'],
-        ['_', '_', '_', '_', '_', '_', '_', '_'],
-        ['_', '_', '_', '_', '_', '_', '_', '_'],
-        ['_', '_', '_', 'BK', '_', '_', '_', '_'],
+        # ['WR', '_', '_', 'WK', '_', '_', '_', 'WR'],
+        # ['WP', '_', 'WP', '_', 'WP', '_', '_', 'WP'],
+        # ['BP', 'WP', 'BP', '_', 'BP', '_', 'WP', 'BP'],
+        # ['_', 'BP', '_', '_', '_', 'WP', 'BP', '_'],
+        # ['_', '_', '_', '_', '_', 'BP', '_', '_'],
+        # ['_', '_', '_', '_', '_', '_', '_', '_'],
+        # ['_', '_', '_', '_', '_', '_', '_', '_'],
+        # ['_', '_', '_', 'BK', '_', '_', '_', '_'],
 
         # ['_', '_', '_', '_', '_', '_', '_', '_'],
         # ['_', '_', '_', '_', '_', '_', '_', '_'],
@@ -620,14 +630,14 @@ if __name__ == "__main__":
 
     # start_pos.printBoard()
 
-    next = generate_next_possible_positions(start_pos)
-    for pos in next:
-        pos.printBoard()
-        print()
+    # next = generate_next_possible_positions(start_pos)
+    # for pos in next:
+    #     pos.printBoard()
+    #     print()
 
     # start_time_2 = time.time()
     # print("Winner optimized: ", play(start_pos, depth))
     # end_time_2 = time.time()
     # print(f"Execution time: {end_time_2 - start_time_2:.2f}s")
 
-    #play(start_pos, depth)
+    play(start_pos, depth)
