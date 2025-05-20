@@ -256,7 +256,7 @@ def minimax_with_tree_generation(position, depth, alpha=float('-inf'), beta=floa
     if is_maximizing:
         best_score = float('-inf')
         for next_pos in next_positions:
-            _, score = minimax_with_tree_generation(next_pos.position, depth - 1, alpha, beta, False)
+            _, score = minimax_with_tree_generation(next_pos, depth - 1, alpha, beta, False)
             if score > best_score:
                 best_score = score
                 best_move = next_pos
@@ -267,7 +267,7 @@ def minimax_with_tree_generation(position, depth, alpha=float('-inf'), beta=floa
     else:
         best_score = float('inf')
         for next_pos in next_positions:
-            _, score = minimax_with_tree_generation(next_pos.position, depth - 1, alpha, beta, False)
+            _, score = minimax_with_tree_generation(next_pos, depth - 1, alpha, beta, False)
             if score < best_score:
                 best_score = score
                 best_move = next_pos
@@ -562,7 +562,7 @@ def play(position, depth):
         print('No move')
         return
 
-    return play(best_move.position, depth)
+    return play(best_move, depth)
 
 
 def generate_starting_position():
