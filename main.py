@@ -124,13 +124,13 @@ def is_under_attack(position, color, i, j):
 
     # Pawns
     if attacker_color == 'W':
-        if i < 7:
+        if i > 1:
             if j > 0 and board[i - 1][j - 1] == 'WP':
                 return True
             if j < 7 and board[i - 1][j + 1] == 'WP':
                 return True
     else:
-        if i > 0:
+        if i < 6:
             if j > 0 and board[i + 1][j - 1] == 'BP':
                 return True
             if j < 7 and board[i + 1][j + 1] == 'BP':
@@ -564,7 +564,7 @@ def play(position, depth):
 
     if position.last_move:
         piece, lf, nf, lt, nt = position.last_move
-        print((piece if piece != 'P' else '') + coords_to_square(lf, nf) + '-' + coords_to_square(lt, nt))
+        print((piece if piece != 'P' else '') + coords_to_square(lf, nf) + ('-' if lf != -1 else '') + coords_to_square(lt, nt))
 
     best_move, _ = minimax_with_tree_generation(position, depth,
                                                 float('-inf'), float('inf'),
@@ -605,7 +605,7 @@ def generate_starting_position():
 
 
 if __name__ == "__main__":
-    depth = 4
+    depth = 3
     start_pos = generate_starting_position()
 
     # start_pos.enPassFrom = [(3, 1)]
