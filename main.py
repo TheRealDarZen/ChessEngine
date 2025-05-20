@@ -248,7 +248,7 @@ def minimax_with_tree_generation(position, depth, alpha=float('-inf'), beta=floa
 
     # Mate / Stalemate
     if not next_positions:
-        ti, tj = position.boardList[color]['K'][0]
+        ti, tj = position.kings_coords[color]
         if is_under_attack(position, color, ti, tj):
             position.score = absolute_score if color == 'B' else -absolute_score
             position.winner = 'W' if color == 'B' else 'B'
@@ -620,7 +620,7 @@ def generate_starting_position():
 
 
 if __name__ == "__main__":
-    depth = 6
+    depth = 4
     start_pos = generate_starting_position()
 
     # start_pos.enPassFrom = [(3, 1)]
