@@ -4,7 +4,7 @@ import time
 absolute_score = 1000
 
 class Position:
-    def __init__(self, board, move, last_move=None, movedKings=None, availRooks=None, kings_coords=None, transform=None):
+    def __init__(self, board, move, last_move=None, movedKings=None, availRooks=None, kings_coords=None, transform=None, numOfMoves=0):
         if movedKings is None:
             movedKings = []
         if availRooks is None:
@@ -25,6 +25,7 @@ class Position:
         self.kings_coords = kings_coords
         self.transform = transform
         self.score = 0.0
+        self.numOfMoves = numOfMoves
         # self.boardList = {
         #     'W': {
         #         'K': [],
@@ -199,37 +200,135 @@ def is_under_attack(position, color, i, j):
     return False
 
 
-def pieces_score(piece):
-    costs = {
-        'K': 10000,
-        'Q': 9,
-        'R': 5,
-        'N': 3,
-        'B': 3,
-        'P': 1
-    }
+def count_pieces(board):
 
-    return costs[piece]
-
-
-def position_score(position):
-    score = 0
-    board = position.board
+    white_pieces = {'K': 0, 'Q': 0, 'R': 0, 'B': 0, 'N': 0, 'P': 0}
+    black_pieces = {'K': 0, 'Q': 0, 'R': 0, 'B': 0, 'N': 0, 'P': 0}
 
     for i in range(8):
         for j in range(8):
             if board[i][j] == '_':
                 continue
-            piece = board[i][j][1]
-            temp = pieces_score(piece)
-            if piece != 'P':
-                temp -= ((abs(i - 5) + abs(j - 5)) if position.move == 'W' else (abs(i - 4) + abs(j - 4))) * 0.01
+
+            color, piece = board[i][j][0], board[i][j][1]
+            if color == 'W':
+                white_pieces[piece] += 1
             else:
-                temp -= ((abs(i - 7)) if position.move == 'W' else (abs(i))) * 0.02
-            if board[i][j][0] == 'W':
-                score += temp
-            else:
-                score -= temp
+                black_pieces[piece] += 1
+
+    return white_pieces, black_pieces
+
+
+def find_doubled_pawns(board):
+
+    white_doubled = 0
+    black_doubled = 0
+
+    for j in range(8):
+        white_pawns_in_file = 0
+        black_pawns_in_file = 0
+
+        for i in range(8):
+            if board[i][j] == '_':
+                continue
+
+            if board[i][j] == 'WP':
+                white_pawns_in_file += 1
+            elif board[i][j] == 'BP':
+                black_pawns_in_file += 1
+
+        if white_pawns_in_file > 1:
+            white_doubled += white_pawns_in_file - 1
+        if black_pawns_in_file > 1:
+            black_doubled += black_pawns_in_file - 1
+
+    return white_doubled, black_doubled
+
+
+def find_blocked_pawns(board):
+
+    white_blocked = 0
+    black_blocked = 0
+
+    for j in range(8):
+        for i in range(1, 7):
+            if board[i][j] == 'WP' and (board[i + 1][j] != '_'):
+                white_blocked += 1
+            elif board[i][j] == 'BP' and (board[i - 1][j] != '_'):
+                black_blocked += 1
+
+    return white_blocked, black_blocked
+
+
+def find_isolated_pawns(board):
+
+    white_isolated = 0
+    black_isolated = 0
+
+    white_pawn_files = [False] * 8
+    black_pawn_files = [False] * 8
+
+    for i in range(8):
+        for j in range(8):
+            if board[i][j] == 'WP':
+                white_pawn_files[j] = True
+            elif board[i][j] == 'BP':
+                black_pawn_files[j] = True
+
+    for j in range(8):
+        if white_pawn_files[j]:
+            has_adjacent = False
+            if j > 0 and white_pawn_files[j - 1]:
+                has_adjacent = True
+            if j < 7 and white_pawn_files[j + 1]:
+                has_adjacent = True
+
+            if not has_adjacent:
+                for i in range(8):
+                    if board[i][j] == 'WP':
+                        white_isolated += 1
+
+        if black_pawn_files[j]:
+            has_adjacent = False
+            if j > 0 and black_pawn_files[j - 1]:
+                has_adjacent = True
+            if j < 7 and black_pawn_files[j + 1]:
+                has_adjacent = True
+
+            if not has_adjacent:
+                for i in range(8):
+                    if board[i][j] == 'BP':
+                        black_isolated += 1
+
+    return white_isolated, black_isolated
+
+
+def find_mobility_score(position):
+    return position.numOfMoves if position.move == 'B' else -position.numOfMoves
+
+
+def position_score(position):
+
+    board = position.board
+
+    white_pieces, black_pieces = count_pieces(board)
+
+    white_doubled, black_doubled = find_doubled_pawns(board)
+    white_blocked, black_blocked = find_blocked_pawns(board)
+    white_isolated, black_isolated = find_isolated_pawns(board)
+    moves = find_mobility_score(position)
+
+    score = (
+            200 * (white_pieces['K'] - black_pieces['K']) +
+            9 * (white_pieces['Q'] - black_pieces['Q']) +
+            5 * (white_pieces['R'] - black_pieces['R']) +
+            3 * (white_pieces['B'] - black_pieces['B'] + white_pieces['N'] - black_pieces['N']) +
+            1 * (white_pieces['P'] - black_pieces['P']) -
+            0.5 * ((white_doubled - black_doubled) +
+                   (white_blocked - black_blocked) +
+                   (white_isolated - black_isolated)) +
+            0.005 * moves
+    )
 
     return score
 
@@ -245,6 +344,7 @@ def minimax_with_tree_generation(position, depth, alpha=float('-inf'), beta=floa
     is_maximizing = (color == 'W')
 
     next_positions = generate_next_possible_positions(position)
+    position.numOfMoves = len(next_positions)
 
     # Mate / Stalemate
     if not next_positions:
@@ -559,11 +659,17 @@ def generate_next_possible_positions(position):
     return result
 
 
+def print_move(position):
+    piece, lf, nf, lt, nt = position.last_move
+    print(
+        (piece if piece != 'P' else '') + coords_to_square(lf, nf, None) + ('-' if lf != -1 else '') + coords_to_square(
+            lt, nt, position.transform))
+
+
 def play(position, depth):
 
     if position.last_move:
-        piece, lf, nf, lt, nt = position.last_move
-        print((piece if piece != 'P' else '') + coords_to_square(lf, nf, None) + ('-' if lf != -1 else '') + coords_to_square(lt, nt, position.transform))
+        print_move(position)
 
     best_move, _ = minimax_with_tree_generation(position, depth,
                                                 float('-inf'), float('inf'),
@@ -574,10 +680,13 @@ def play(position, depth):
         return
 
     if best_move.winner == 'W':
+        print_move(best_move)
         return 'White wins!'
     elif best_move.winner == 'B':
+        print_move(best_move)
         return 'Black wins!'
     elif best_move.winner == 'D':
+        print_move(best_move)
         return 'Draw!'
 
     return play(best_move, depth)
@@ -595,13 +704,13 @@ def generate_starting_position():
         ['BP', 'BP', 'BP', 'BP', 'BP', 'BP', 'BP', 'BP'],
         ['BR', 'BN', 'BB', 'BK', 'BQ', 'BB', 'BN', 'BR']
 
-        # ['WR', '_', '_', 'WK', '_', '_', '_', 'WR'],
-        # ['WP', '_', 'WP', '_', 'WP', '_', '_', 'WP'],
-        # ['BP', 'WP', 'BP', '_', 'BP', '_', 'WP', 'BP'],
-        # ['_', 'BP', '_', '_', '_', 'WP', 'BP', '_'],
-        # ['_', '_', '_', '_', '_', 'BP', '_', '_'],
+        # ['WK', '_', '_', '_', '_', '_', '_', 'WR'],
         # ['_', '_', '_', '_', '_', '_', '_', '_'],
         # ['_', '_', '_', '_', '_', '_', '_', '_'],
+        # ['_', '_', '_', '_', '_', '_', '_', '_'],
+        # ['_', '_', '_', '_', '_', '_', '_', '_'],
+        # ['_', '_', '_', '_', '_', '_', '_', '_'],
+        # ['WR', '_', '_', '_', '_', '_', '_', '_'],
         # ['_', '_', '_', 'BK', '_', '_', '_', '_'],
 
         # ['_', '_', '_', '_', '_', '_', '_', '_'],
@@ -633,6 +742,8 @@ if __name__ == "__main__":
     # next = generate_next_possible_positions(start_pos)
     # for pos in next:
     #     pos.printBoard()
+    #     pos.numOfMoves = len(next)
+    #     print(position_score(pos))
     #     print()
 
     # start_time_2 = time.time()
@@ -640,4 +751,4 @@ if __name__ == "__main__":
     # end_time_2 = time.time()
     # print(f"Execution time: {end_time_2 - start_time_2:.2f}s")
 
-    play(start_pos, depth)
+    print(play(start_pos, depth))
