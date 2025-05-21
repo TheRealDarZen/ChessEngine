@@ -200,105 +200,102 @@ def is_under_attack(position, color, i, j):
     return False
 
 
-def count_pieces(board):
+def count_pieces(boardList):
 
-    white_pieces = {'K': 0, 'Q': 0, 'R': 0, 'B': 0, 'N': 0, 'P': 0}
-    black_pieces = {'K': 0, 'Q': 0, 'R': 0, 'B': 0, 'N': 0, 'P': 0}
+    white_pieces = {'K': len(boardList['W']['K']),
+                    'Q': len(boardList['W']['Q']),
+                    'R': len(boardList['W']['R']),
+                    'B': len(boardList['W']['B']),
+                    'N': len(boardList['W']['N']),
+                    'P': len(boardList['W']['P'])}
 
-    for i in range(8):
-        for j in range(8):
-            if board[i][j] == '_':
-                continue
-
-            color, piece = board[i][j][0], board[i][j][1]
-            if color == 'W':
-                white_pieces[piece] += 1
-            else:
-                black_pieces[piece] += 1
+    black_pieces = {'K': len(boardList['B']['K']),
+                    'Q': len(boardList['B']['Q']),
+                    'R': len(boardList['B']['R']),
+                    'B': len(boardList['B']['B']),
+                    'N': len(boardList['B']['N']),
+                    'P': len(boardList['B']['P'])}
 
     return white_pieces, black_pieces
 
 
-def find_doubled_pawns(board):
+def find_doubled_pawns(boardList, board):
 
     white_doubled = 0
     black_doubled = 0
 
-    for j in range(8):
-        white_pawns_in_file = 0
-        black_pawns_in_file = 0
+    # Group pawns by file
+    white_files = {}
+    black_files = {}
 
-        for i in range(8):
-            if board[i][j] == '_':
-                continue
+    for i, j in boardList['W']['P']:
+        white_files[j] = white_files.get(j, 0) + 1
 
-            if board[i][j] == 'WP':
-                white_pawns_in_file += 1
-            elif board[i][j] == 'BP':
-                black_pawns_in_file += 1
+    for i, j in boardList['B']['P']:
+        black_files[j] = black_files.get(j, 0) + 1
 
-        if white_pawns_in_file > 1:
-            white_doubled += white_pawns_in_file - 1
-        if black_pawns_in_file > 1:
-            black_doubled += black_pawns_in_file - 1
+    # Count doubled pawns in each file
+    for file_index, pawn_count in white_files.items():
+        if pawn_count > 1:
+            white_doubled += pawn_count - 1
+
+    for file_index, pawn_count in black_files.items():
+        if pawn_count > 1:
+            black_doubled += pawn_count - 1
 
     return white_doubled, black_doubled
 
 
-def find_blocked_pawns(board):
+def find_blocked_pawns(boardList, board):
 
     white_blocked = 0
     black_blocked = 0
 
-    for j in range(8):
-        for i in range(1, 7):
-            if board[i][j] == 'WP' and (board[i + 1][j] != '_'):
-                white_blocked += 1
-            elif board[i][j] == 'BP' and (board[i - 1][j] != '_'):
-                black_blocked += 1
+    # Check each white pawn
+    for i, j in boardList['W']['P']:
+        if board[i + 1][j] != '_':
+            white_blocked += 1
+
+    for i, j in boardList['B']['P']:
+        if board[i - 1][j] != '_':
+            black_blocked += 1
 
     return white_blocked, black_blocked
 
 
-def find_isolated_pawns(board):
-
-    white_isolated = 0
-    black_isolated = 0
+def find_isolated_pawns(boardList, board):
 
     white_pawn_files = [False] * 8
     black_pawn_files = [False] * 8
 
-    for i in range(8):
-        for j in range(8):
-            if board[i][j] == 'WP':
-                white_pawn_files[j] = True
-            elif board[i][j] == 'BP':
-                black_pawn_files[j] = True
+    for i, j in boardList['W']['P']:
+        white_pawn_files[j] = True
 
-    for j in range(8):
-        if white_pawn_files[j]:
-            has_adjacent = False
-            if j > 0 and white_pawn_files[j - 1]:
-                has_adjacent = True
-            if j < 7 and white_pawn_files[j + 1]:
-                has_adjacent = True
+    for i, j in boardList['B']['P']:
+        black_pawn_files[j] = True
 
-            if not has_adjacent:
-                for i in range(8):
-                    if board[i][j] == 'WP':
-                        white_isolated += 1
+    white_isolated = 0
+    black_isolated = 0
 
-        if black_pawn_files[j]:
-            has_adjacent = False
-            if j > 0 and black_pawn_files[j - 1]:
-                has_adjacent = True
-            if j < 7 and black_pawn_files[j + 1]:
-                has_adjacent = True
+    for i, j in boardList['W']['P']:
+        has_adjacent = False
+        if j > 0 and white_pawn_files[j - 1]:
+            has_adjacent = True
+        if j < 7 and white_pawn_files[j + 1]:
+            has_adjacent = True
 
-            if not has_adjacent:
-                for i in range(8):
-                    if board[i][j] == 'BP':
-                        black_isolated += 1
+        if not has_adjacent:
+            white_isolated += 1
+
+    for i, j in boardList['B']['P']:
+        has_adjacent = False
+        if j > 0 and black_pawn_files[j - 1]:
+            has_adjacent = True
+        if j < 7 and black_pawn_files[j + 1]:
+            has_adjacent = True
+
+        if not has_adjacent:
+            black_isolated += 1
 
     return white_isolated, black_isolated
 
@@ -307,16 +304,81 @@ def find_mobility_score(position):
     return position.numOfMoves if position.move == 'B' else -position.numOfMoves
 
 
+def find_center_score(position, board):
+
+    white_center_score = 0
+    black_center_score = 0
+
+    center = [(3, 3), (3, 4), (4, 3), (4, 4)]
+
+    for i, j in center:
+        if board[i][j][0] == 'W':
+            white_center_score += 1
+        elif board[i][j][0] == 'B':
+            black_center_score += 1
+
+        if is_under_attack(position, 'B', i, j):
+            white_center_score += 0.5
+        if is_under_attack(position, 'W', i, j):
+            black_center_score += 0.5
+
+    return white_center_score, black_center_score
+
+
+def find_development_score(boardList, board):
+    white_development_score = 0
+    black_development_score = 0
+
+    pieces = ['Q', 'N', 'B']
+
+    for piece in pieces:
+        for i, j in boardList['W'][piece]:
+            if i != 0:
+                white_development_score += 1 if piece != 'Q' else 0.5
+
+        for i, j in boardList['B'][piece]:
+            if i != 7:
+                black_development_score += 1 if piece != 'Q' else 0.5
+
+    return white_development_score, black_development_score
+
+
 def position_score(position):
 
     board = position.board
+    boardList = {
+        'W': {
+            'K': [],
+            'Q': [],
+            'R': [],
+            'B': [],
+            'N': [],
+            'P': []
+        },
+        'B': {
+            'K': [],
+            'Q': [],
+            'R': [],
+            'B': [],
+            'N': [],
+            'P': []
+        }
+    }
+    for i in range(8):
+        for j in range(8):
+            if board[i][j] == '_':
+                continue
+            boardList[board[i][j][0]][board[i][j][1]].append((i, j))
 
-    white_pieces, black_pieces = count_pieces(board)
+    white_pieces, black_pieces = count_pieces(boardList)
 
-    white_doubled, black_doubled = find_doubled_pawns(board)
-    white_blocked, black_blocked = find_blocked_pawns(board)
-    white_isolated, black_isolated = find_isolated_pawns(board)
-    moves = find_mobility_score(position)
+    white_doubled, black_doubled = find_doubled_pawns(boardList, board)
+    white_blocked, black_blocked = find_blocked_pawns(boardList, board)
+    white_isolated, black_isolated = find_isolated_pawns(boardList, board)
+    mobility_score = find_mobility_score(position)
+    white_center_score, black_center_score = find_center_score(position, board)
+    white_development_score, black_development_score = find_development_score(boardList, board)
+
 
     score = (
             200 * (white_pieces['K'] - black_pieces['K']) +
@@ -327,7 +389,8 @@ def position_score(position):
             0.5 * ((white_doubled - black_doubled) +
                    (white_blocked - black_blocked) +
                    (white_isolated - black_isolated)) +
-            0.005 * moves
+            0.15 * (white_center_score - black_center_score) +
+            0.25 * (white_development_score - black_development_score)
     )
 
     return score
