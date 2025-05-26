@@ -1,7 +1,16 @@
+import sys
 import time
+import pickle
 
 
 absolute_score = 1000
+endOfGame = False
+
+# tree = None
+
+# rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1
+
+# remove a tree, re-generation of moves is fine anyway. also find ways to improve performance while generating positions
 
 class Position:
     def __init__(self, board, move, last_move=None, movedKings=None, availRooks=None, kings_coords=None, transform=None, numOfMoves=0):
@@ -25,7 +34,7 @@ class Position:
         self.kings_coords = kings_coords
         self.transform = transform
         self.score = 0.0
-        self.numOfMoves = numOfMoves
+        # self.numOfMoves = numOfMoves
         # self.boardList = {
         #     'W': {
         #         'K': [],
@@ -56,6 +65,30 @@ class Position:
     def printBoard(self):
         for row in self.board:
            print(*row, sep=' ')
+
+
+# class Node:
+#     def __init__(self, position):
+#         self.position = position
+#         self.next = { }
+#
+#     def add(self, node):
+#         self.next[generate_hash(node.position)] = node
+
+
+def generate_hash(position):
+
+    hash = ''
+    board = position.board
+    for i in range(8):
+        for j in range(8):
+            hash += board[i][j]
+
+    # hash_parts.append(f"m{position.move}")
+    # hash_parts.append(f"k{''.join(position.movedKings)}")
+    # hash_parts.append(f"r{''.join(f'{r[0]}{r[1]}' for r in position.availRooks)}")
+
+    return hash
 
 
 def coords_to_square(i, j, t):
@@ -300,10 +333,6 @@ def find_isolated_pawns(boardList, board):
     return white_isolated, black_isolated
 
 
-def find_mobility_score(position):
-    return position.numOfMoves if position.move == 'B' else -position.numOfMoves
-
-
 def find_center_score(position, board):
 
     white_center_score = 0
@@ -334,13 +363,35 @@ def find_development_score(boardList, board):
     for piece in pieces:
         for i, j in boardList['W'][piece]:
             if i != 0:
-                white_development_score += 1 if piece != 'Q' else 0.5
+                if piece == 'N':
+                    white_development_score += 1
+                elif piece == 'B':
+                    white_development_score += 0.9
+                else:
+                    white_development_score += 0.5
 
         for i, j in boardList['B'][piece]:
             if i != 7:
-                black_development_score += 1 if piece != 'Q' else 0.5
+                if piece == 'N':
+                    black_development_score += 1
+                elif piece == 'B':
+                    black_development_score += 0.9
+                else:
+                    black_development_score += 0.5
 
     return white_development_score, black_development_score
+
+
+def find_pawn_march_score(boardList):
+    white_pawn_march_score = 0
+    black_pawn_march_score = 0
+
+    for i, j in boardList['W']['P']:
+        white_pawn_march_score += i
+    for i, j in boardList['B']['P']:
+        black_pawn_march_score += 7 - i
+
+    return white_pawn_march_score, black_pawn_march_score
 
 
 def position_score(position):
@@ -375,9 +426,9 @@ def position_score(position):
     white_doubled, black_doubled = find_doubled_pawns(boardList, board)
     white_blocked, black_blocked = find_blocked_pawns(boardList, board)
     white_isolated, black_isolated = find_isolated_pawns(boardList, board)
-    mobility_score = find_mobility_score(position)
     white_center_score, black_center_score = find_center_score(position, board)
     white_development_score, black_development_score = find_development_score(boardList, board)
+    white_pawn_march_score, black_pawn_march_score = find_pawn_march_score(boardList)
 
 
     score = (
@@ -386,14 +437,27 @@ def position_score(position):
             5 * (white_pieces['R'] - black_pieces['R']) +
             3 * (white_pieces['B'] - black_pieces['B'] + white_pieces['N'] - black_pieces['N']) +
             1 * (white_pieces['P'] - black_pieces['P']) -
-            0.5 * ((white_doubled - black_doubled) +
-                   (white_blocked - black_blocked) +
-                   (white_isolated - black_isolated)) +
-            0.15 * (white_center_score - black_center_score) +
-            0.25 * (white_development_score - black_development_score)
+            0.5 * (white_doubled - black_doubled) +
+            0.1 * (white_blocked - black_blocked) +
+            0.25 * (white_isolated - black_isolated) +
+            0.3 * (white_center_score - black_center_score) +
+            0.2 * (white_development_score - black_development_score) +
+            0.05 * (white_pawn_march_score - black_pawn_march_score)
     )
 
     return score
+
+
+def check_if_mate_or_stalemate(position):
+    color = position.move
+
+    if not generate_next_possible_positions(position, True):
+        ti, tj = position.kings_coords[color]
+        if is_under_attack(position, color, ti, tj):
+            return 'Mate'
+        else:
+            return 'Stalemate'
+    return 'None'
 
 
 def minimax_with_tree_generation(position, depth, alpha=float('-inf'), beta=float('inf'),
@@ -406,23 +470,30 @@ def minimax_with_tree_generation(position, depth, alpha=float('-inf'), beta=floa
     color = position.move
     is_maximizing = (color == 'W')
 
-    next_positions = generate_next_possible_positions(position)
-    position.numOfMoves = len(next_positions)
+    # next_positions = []
+    # for hash in node.next:
+    #     next_positions.append(node.next[hash])
+    #
+    # node.position.numOfMoves = len(next_positions)
 
     # Mate / Stalemate
-    if not next_positions:
-        ti, tj = position.kings_coords[color]
-        if is_under_attack(position, color, ti, tj):
-            position.score = absolute_score if color == 'B' else -absolute_score
+    state = check_if_mate_or_stalemate(position)
+    if state != 'None':
+        if state == 'Mate':
             position.winner = 'W' if color == 'B' else 'B'
-        else:
-            position.score = 0.0
+            position.score = absolute_score if color == 'B' else -absolute_score
+        elif state == 'Stalemate':
             position.winner = 'D'
+            position.score = 0.0
         return position, position.score if isRoot else position.score
 
     if depth <= 0:
         position.score = position_score(position)
         return position, position.score if isRoot else position.score
+
+
+    next_positions = generate_next_possible_positions(position)
+
 
     best_move = None
 
@@ -450,8 +521,9 @@ def minimax_with_tree_generation(position, depth, alpha=float('-inf'), beta=floa
         return best_move, best_score if isRoot else best_score
 
 
-def generate_next_possible_positions(position):
+def generate_next_possible_positions(position, isCheck=False):
 
+    global seen
     color = position.move
     board = position.board
     # boardList = position.boardList
@@ -518,6 +590,8 @@ def generate_next_possible_positions(position):
 
                                 ti, tj = new_position.kings_coords[color]
                                 if not is_under_attack(new_position, color, ti, tj):
+                                    if isCheck:
+                                        return True
                                     result.append(new_position)
 
                                 if opPiece:
@@ -587,6 +661,8 @@ def generate_next_possible_positions(position):
 
                             ti, tj = new_position.kings_coords[color]
                             if not is_under_attack(new_position, color, ti, tj):
+                                if isCheck:
+                                    return True
                                 result.append(new_position)
 
                 # Black
@@ -640,6 +716,8 @@ def generate_next_possible_positions(position):
 
                             ti, tj = new_position.kings_coords[color]
                             if not is_under_attack(new_position, color, ti, tj):
+                                if isCheck:
+                                    return True
                                 result.append(new_position)
 
     # Castles
@@ -718,8 +796,37 @@ def generate_next_possible_positions(position):
 
                     result.append(new_position)
 
-
+    if isCheck:
+        return False
     return result
+
+# def generate_next_tree(node, depth):
+#     global total_nodes
+#
+#     if depth <= 0:
+#         #gc.collect()
+#         return node
+#
+#     # If a node already has generated children
+#     if node.next:
+#         for hash in node.next:
+#             # node.next[hash].position.printBoard()
+#             node.next[hash] = generate_next_tree(node.next[hash], depth)
+#
+#     else:
+#         #start_time = time.time()
+#         next_nodes = generate_next_possible_positions(node)
+#         #end_time = time.time()
+#         total_nodes += len(next_nodes)
+#         #print(f'{len(next_nodes)} nodes generated in {end_time - start_time} seconds')
+#         #gc.collect()
+#
+#         for next_node in next_nodes:
+#             processed_next_node = generate_next_tree(next_node, depth - 1)
+#             node.add(processed_next_node)
+#
+#     #gc.collect()
+#     return node
 
 
 def print_move(position):
@@ -738,7 +845,7 @@ def play(position, depth):
                                                 float('-inf'), float('inf'),
                                                 True)
 
-    if not(best_move):
+    if not best_move:
         print('No move')
         return
 
@@ -755,6 +862,36 @@ def play(position, depth):
     return play(best_move, depth)
 
 
+def make_a_move(position, curr_depth):
+    global endOfGame
+
+    best_move, _ = minimax_with_tree_generation(position, curr_depth,
+                                                float('-inf'), float('inf'),
+                                                True)
+
+    if not best_move:
+        print('No move')
+        return
+
+    # tree = tree.next[generate_hash(best_move.position)]
+    # gc.collect()
+
+    if best_move.last_move:
+        print_move(best_move)
+
+    if best_move.winner == 'W':
+        print('White wins!')
+    elif best_move.winner == 'B':
+        print('Black wins!')
+    elif best_move.winner == 'D':
+        print('Draw!')
+
+    if best_move.winner != '_':
+        endOfGame = True
+
+    return best_move
+
+
 def generate_starting_position():
     board = [
 
@@ -767,14 +904,14 @@ def generate_starting_position():
         ['BP', 'BP', 'BP', 'BP', 'BP', 'BP', 'BP', 'BP'],
         ['BR', 'BN', 'BB', 'BK', 'BQ', 'BB', 'BN', 'BR']
 
-        # ['WK', '_', '_', '_', '_', '_', '_', 'WR'],
+        # ['WR', 'WN', 'WB', 'WK', 'WQ', 'WB', 'WN', 'WR'],
+        # ['WP', '_', 'WP', 'WP', 'WP', 'WP', 'WP', 'WP'],
         # ['_', '_', '_', '_', '_', '_', '_', '_'],
         # ['_', '_', '_', '_', '_', '_', '_', '_'],
         # ['_', '_', '_', '_', '_', '_', '_', '_'],
         # ['_', '_', '_', '_', '_', '_', '_', '_'],
-        # ['_', '_', '_', '_', '_', '_', '_', '_'],
-        # ['WR', '_', '_', '_', '_', '_', '_', '_'],
-        # ['_', '_', '_', 'BK', '_', '_', '_', '_'],
+        # ['BP', '_', '_', '_', 'BP', 'BP', 'BP', 'BP'],
+        # ['BR', 'BN', 'BB', 'BK', 'BQ', 'BB', 'BN', 'BR']
 
         # ['_', '_', '_', '_', '_', '_', '_', '_'],
         # ['_', '_', '_', '_', '_', '_', '_', '_'],
@@ -791,8 +928,109 @@ def generate_starting_position():
     return start_pos
 
 
+def make_players_move(move, color, position):
+
+    lines = {
+        'h': 0,
+        'g': 1,
+        'f': 2,
+        'e': 3,
+        'd': 4,
+        'c': 5,
+        'b': 6,
+        'a': 7
+    }
+    t = 'P'
+
+    position.move = 'W' if color == 'B' else 'B'
+
+    if move == 'O-O':
+        if color == 'W':
+            position.board[0][3] = '_'
+            position.board[0][0] = '_'
+            position.board[0][1] = 'WK'
+            position.board[0][2] = 'WR'
+            if 'W' not in position.movedKings:
+                position.movedKings.append('W')
+            position.availRooks.remove((0, 0))
+        else:
+            position.board[7][3] = '_'
+            position.board[7][0] = '_'
+            position.board[7][1] = 'BK'
+            position.board[7][2] = 'BR'
+            if 'B' not in position.movedKings:
+                position.movedKings.append('B')
+            position.availRooks.remove((0, 0))
+    elif move == 'O-O-O':
+        if color == 'W':
+            position.board[0][3] = '_'
+            position.board[0][7] = '_'
+            position.board[0][5] = 'WK'
+            position.board[0][4] = 'WR'
+            if 'W' not in position.movedKings:
+                position.movedKings.append('W')
+            position.availRooks.remove((0, 7))
+        else:
+            position.board[7][3] = '_'
+            position.board[7][7] = '_'
+            position.board[7][5] = 'BK'
+            position.board[7][4] = 'BR'
+            if 'B' not in position.movedKings:
+                position.movedKings.append('B')
+            position.availRooks.remove((7, 7))
+
+    else:
+        if move[0] in ['K', 'Q', 'R', 'B', 'N']:
+            moveFrom = (lines[move[1]], int (move[2]))
+            moveTo = (lines[move[4]], int (move[5]))
+        else:
+            moveFrom = (lines[move[0]], int(move[1]))
+            moveTo = (lines[move[3]], int(move[4]))
+            if move[-1] in ['Q', 'R', 'B', 'N']:
+                t = move[-1]
+
+        fj, fi = moveFrom
+        # print('From:', fi, fj)
+        tj, ti = moveTo
+        # print('To:', ti, tj)
+        position.board[fi - 1][fj] = '_'
+        #print(fi - 1, fj)
+        position.board[ti - 1][tj] = (color + (move[0] if move[0] in ['K', 'Q', 'R', 'B', 'N'] and t == 'P' else t))
+
+        if move[-1] == '!': # En Passant (temporary)
+            if color == 'W':
+                position.board[ti - 2][tj] = '_'
+            else:
+                position.board[ti][tj] = '_'
+
+        # If king or rook moved
+        if move[0] == 'K':
+            if color not in position.movedKings:
+                position.movedKings.append(color)
+        elif move[0] == 'R':
+            if (fi - 1, fj) in position.availRooks:
+                position.availRooks.remove((fi - 1, fj))
+
+
+    return position
+
+    # tree = tree.next[generate_hash(tempPos)]
+    # gc.collect()
+
+
+def pieceCount(position):
+    count = 0
+    for i in range(8):
+        for j in range(8):
+            count += 1 if position.board[i][j] != '_' else 0
+    return count
+
+
 if __name__ == "__main__":
-    depth = 4
+
+    start_depth = 4
+    depth = start_depth
+    color = 'W'
     start_pos = generate_starting_position()
 
     # start_pos.enPassFrom = [(3, 1)]
@@ -809,9 +1047,47 @@ if __name__ == "__main__":
     #     print(position_score(pos))
     #     print()
 
-    # start_time_2 = time.time()
-    # print("Winner optimized: ", play(start_pos, depth))
-    # end_time_2 = time.time()
-    # print(f"Execution time: {end_time_2 - start_time_2:.2f}s")
+    # tree = generate_next_tree(start_pos, 2)
 
-    print(play(start_pos, depth))
+    # print(play(start_pos, depth))
+
+    # print('Generating a tree...')
+    # start_time = time.time()
+    # tree = generate_next_tree(start_pos, depth)
+    # end_time = time.time()
+    # print(f'Tree generated after {end_time - start_time:.2f} seconds.')
+
+    # with open('tree.pkl', 'wb') as f:
+    #     pickle.dump(tree, f)
+
+
+    # with open("tree.pkl", "rb") as f:
+    #     loaded_tree = pickle.load(f)
+
+    current_position = start_pos
+
+    while current_position.winner == '_':
+        
+        players_move = sys.stdin.readline().strip()
+        current_position = make_players_move(players_move, color, current_position)
+
+        if pieceCount(current_position) <= 4:
+            depth = start_depth + 10
+        elif pieceCount(current_position) <= 6:
+            depth = start_depth + 8
+        elif pieceCount(current_position) <= 8:
+            depth = start_depth + 6
+        elif pieceCount(current_position) <= 10:
+            depth = start_depth + 4
+        elif pieceCount(current_position) <= 16:
+            depth = start_depth + 2
+
+        start_time = time.time()
+        current_position = make_a_move(current_position, depth)
+        end_time = time.time()
+        print(f'Move made after {end_time - start_time:.2f} seconds.')
+        # print(current_position.movedKings)
+        # print(current_position.availRooks)
+        # print(current_position.enPassFrom, current_position.enPassTo)
+        if endOfGame:
+            break
