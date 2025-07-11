@@ -354,7 +354,7 @@ def find_center_score(position, board):
     return white_center_score, black_center_score
 
 
-def find_development_score(boardList, board):
+def find_development_score(boardList):
     white_development_score = 0
     black_development_score = 0
 
@@ -427,7 +427,7 @@ def position_score(position):
     white_blocked, black_blocked = find_blocked_pawns(boardList, board)
     white_isolated, black_isolated = find_isolated_pawns(boardList, board)
     white_center_score, black_center_score = find_center_score(position, board)
-    white_development_score, black_development_score = find_development_score(boardList, board)
+    white_development_score, black_development_score = find_development_score(boardList)
     white_pawn_march_score, black_pawn_march_score = find_pawn_march_score(boardList)
 
 
@@ -437,8 +437,8 @@ def position_score(position):
             5 * (white_pieces['R'] - black_pieces['R']) +
             3 * (white_pieces['B'] - black_pieces['B'] + white_pieces['N'] - black_pieces['N']) +
             1 * (white_pieces['P'] - black_pieces['P']) -
-            0.5 * (white_doubled - black_doubled) +
-            0.1 * (white_blocked - black_blocked) +
+            0.5 * (white_doubled - black_doubled) -
+            0.1 * (white_blocked - black_blocked) -
             0.25 * (white_isolated - black_isolated) +
             0.3 * (white_center_score - black_center_score) +
             0.2 * (white_development_score - black_development_score) +
@@ -488,18 +488,24 @@ def minimax_with_tree_generation(position, depth, alpha=float('-inf'), beta=floa
         return position, position.score if isRoot else position.score
 
     if depth <= 0:
-        position.score = position_score(position)
-        return position, position.score if isRoot else position.score
+        # Quintessence search
+        # if generate_next_possible_positions(position, False, True):
+        #     print('Quint')
+        #     next_positions_agg, next_positions_other = generate_next_possible_positions(position)
+        #     next_positions_other = []
+        # else:
+            position.score = position_score(position)
+            return position, position.score if isRoot else position.score
 
-
-    next_positions = generate_next_possible_positions(position)
+    else:
+        next_positions_agg, next_positions_other = generate_next_possible_positions(position)
 
 
     best_move = None
 
     if is_maximizing:
         best_score = float('-inf')
-        for next_pos in next_positions:
+        for next_pos in (next_positions_agg + next_positions_other):
             _, score = minimax_with_tree_generation(next_pos, depth - 1, alpha, beta, False)
             if score > best_score:
                 best_score = score
@@ -510,7 +516,7 @@ def minimax_with_tree_generation(position, depth, alpha=float('-inf'), beta=floa
         return best_move, best_score if isRoot else best_score
     else:
         best_score = float('inf')
-        for next_pos in next_positions:
+        for next_pos in (next_positions_agg + next_positions_other):
             _, score = minimax_with_tree_generation(next_pos, depth - 1, alpha, beta, False)
             if score < best_score:
                 best_score = score
@@ -521,13 +527,13 @@ def minimax_with_tree_generation(position, depth, alpha=float('-inf'), beta=floa
         return best_move, best_score if isRoot else best_score
 
 
-def generate_next_possible_positions(position, isCheck=False):
+def generate_next_possible_positions(position, isCheck=False, isQuint=False):
 
-    global seen
     color = position.move
     board = position.board
     # boardList = position.boardList
-    result = []
+    moves_agg = []
+    moves_other = []
 
     # for i in range(position.m):
     #     for j in range(position.n):
@@ -592,7 +598,12 @@ def generate_next_possible_positions(position, isCheck=False):
                                 if not is_under_attack(new_position, color, ti, tj):
                                     if isCheck:
                                         return True
-                                    result.append(new_position)
+                                    if opPiece:
+                                        if isQuint:
+                                            return True
+                                        moves_agg.append(new_position)
+                                    else:
+                                        moves_other.append(new_position)
 
                                 if opPiece:
                                     break
@@ -609,6 +620,7 @@ def generate_next_possible_positions(position, isCheck=False):
                 tempEnPassFrom = []
                 tempEnPassTo = None
                 change = False
+                opPiece = False
 
                 # White
                 if color == 'W':
@@ -647,9 +659,14 @@ def generate_next_possible_positions(position, isCheck=False):
                         ni, nj = move
 
                         for tp in transformList:
+                            if board[ni][nj] != '_' or tp != 'P':
+                                opPiece = True
                             # Board
                             tempBoard = [row[:] for row in board]
                             tempBoard[ni][nj] = (color + tp)
+                            if tempBoard[ni][nj] == '_' and ni != piecePos[0]:
+                                tempBoard[ni - 1][nj] = '_'
+                                opPiece = True
                             tempBoard[piecePos[0]][piecePos[1]] = '_'
 
                             new_position = Position(tempBoard, 'B',
@@ -663,7 +680,12 @@ def generate_next_possible_positions(position, isCheck=False):
                             if not is_under_attack(new_position, color, ti, tj):
                                 if isCheck:
                                     return True
-                                result.append(new_position)
+                                if opPiece:
+                                    if isQuint:
+                                        return True
+                                    moves_agg.append(new_position)
+                                else:
+                                    moves_other.append(new_position)
 
                 # Black
                 else:
@@ -702,9 +724,14 @@ def generate_next_possible_positions(position, isCheck=False):
                         ni, nj = move
 
                         for tp in transformList:
+                            if board[ni][nj] != '_' or tp != 'P':
+                                opPiece = True
                             # Board
                             tempBoard = [row[:] for row in board]
                             tempBoard[ni][nj] = (color + tp)
+                            if tempBoard[ni][nj] == '_' and ni != piecePos[0]:
+                                tempBoard[ni + 1][nj] = '_'
+                                opPiece = True
                             tempBoard[piecePos[0]][piecePos[1]] = '_'
 
                             new_position = Position(tempBoard, 'W',
@@ -718,10 +745,15 @@ def generate_next_possible_positions(position, isCheck=False):
                             if not is_under_attack(new_position, color, ti, tj):
                                 if isCheck:
                                     return True
-                                result.append(new_position)
+                                if opPiece:
+                                    if isQuint:
+                                        return True
+                                    moves_agg.append(new_position)
+                                else:
+                                    moves_other.append(new_position)
 
     # Castles
-    if color not in position.movedKings:
+    if color not in position.movedKings and not isQuint:
         if color == 'W':
             # Short Castle
             if board[0][3] == 'WK' and board[0][0] == 'WR' and board[0][1] == '_' and board[0][2] == '_' and (0, 0) in position.availRooks:
@@ -739,7 +771,7 @@ def generate_next_possible_positions(position, isCheck=False):
                     new_position.movedKings.append(color)
                     new_position.availRooks.remove((0, 0))
 
-                    result.append(new_position)
+                    moves_other.append(new_position)
 
             # Long Castle
             if board[0][3] == 'WK' and board[0][7] == 'WR' and board[0][4] == '_' and board[0][5] == '_' and board[0][6] == '_' and (0, 7) in position.availRooks:
@@ -756,7 +788,7 @@ def generate_next_possible_positions(position, isCheck=False):
                     new_position.movedKings.append(color)
                     new_position.availRooks.remove((0, 7))
 
-                    result.append(new_position)
+                    moves_other.append(new_position)
 
         else:
             # Short Castle
@@ -775,7 +807,7 @@ def generate_next_possible_positions(position, isCheck=False):
                     new_position.movedKings.append(color)
                     new_position.availRooks.remove((7, 0))
 
-                    result.append(new_position)
+                    moves_other.append(new_position)
 
             # Long Castle
             if board[7][3] == 'BK' and board[7][7] == 'BR' and board[7][4] == '_' and board[7][5] == '_' and board[7][
@@ -794,11 +826,11 @@ def generate_next_possible_positions(position, isCheck=False):
                     new_position.movedKings.append(color)
                     new_position.availRooks.remove((7, 7))
 
-                    result.append(new_position)
+                    moves_other.append(new_position)
 
-    if isCheck:
+    if isCheck or isQuint:
         return False
-    return result
+    return moves_agg, moves_other
 
 # def generate_next_tree(node, depth):
 #     global total_nodes
@@ -1067,8 +1099,14 @@ if __name__ == "__main__":
     current_position = start_pos
 
     while current_position.winner == '_':
-        
-        players_move = sys.stdin.readline().strip()
+
+        while True:
+            players_move = sys.stdin.readline().strip()
+            if players_move == 'out':
+                current_position.printBoard()
+            else:
+                break
+
         current_position = make_players_move(players_move, color, current_position)
 
         if pieceCount(current_position) <= 4:
